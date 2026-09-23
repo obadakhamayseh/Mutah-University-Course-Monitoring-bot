@@ -1,5 +1,6 @@
 import html
 import logging
+from datetime import datetime
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
@@ -51,8 +52,11 @@ def format_section_card(section: SectionInfo, is_watched: bool = False) -> str:
     if notes:
         lines.append(f"📝 <b>ملاحظات:</b> {notes}")
 
+    check_time = datetime.now().strftime("%I:%M:%S %p")
+    lines.append(f"⏱ <b>آخر فحص:</b> {check_time}")
+
     if is_watched:
-        lines.append("\n🔔 <b>حالة المراقبة:</b> مفعلة (ستصلك رسالة فور توفر مقعد)")
+        lines.append("🔔 <b>حالة المراقبة:</b> مفعلة (ستصلك رسالة فور توفر مقعد)")
 
     return "\n".join(lines)
 
@@ -352,13 +356,20 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             section = await fetcher.get_section_async(course_id, section_no)
             if section:
                 text = format_section_card(section, is_watched=True)
-                await query.edit_message_text(
-                    text,
-                    parse_mode=ParseMode.HTML,
-                    reply_markup=get_section_keyboard(course_id, section_no),
-                )
+                try:
+                    await query.edit_message_text(
+                        text,
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=get_section_keyboard(course_id, section_no),
+                    )
+                    await query.answer("تم تحديث الحالة اللحظية بنجاح ✅")
+                except Exception as e:
+                    if "Message is not modified" in str(e):
+                        await query.answer("تم الفحص: لا يوجد تغيير في بيانات الشعبة ✅")
+                    else:
+                        raise
             else:
-                await query.answer("تعذر تحديث البيانات حالياً.", show_alert=True)
+                await query.answer("تعذر جلب البيانات من بوابة الجامعة حالياً.", show_alert=True)
 
     elif data.startswith("unwatch:"):
         parts = data.split(":")

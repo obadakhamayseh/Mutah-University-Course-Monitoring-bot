@@ -75,10 +75,10 @@ async def run_system_tests():
         await add_subscription(session, user2.id, section.course_id, section.section, section.course_name)
 
         unique_sections = await get_unique_active_sections(session)
-        print(f"✅ عدد المستخدمين المتابعين للشعبة: 2")
-        print(f"✅ عدد طلبات الفحص المطلوبة لخادم الجامعة: {len(unique_sections)} طلب فقط!")
-        assert len(unique_sections) == 1, "Deduplication failed!"
-        print(f"   - الشعب المراقبة فريداً: {unique_sections}")
+        occurrences = [s for s in unique_sections if s == (section.course_id, section.section)]
+        print(f"✅ ظهور الشعبة {section.course_id}-{section.section} في قائمة الفحص: {len(occurrences)} مرة فقط (Deduplicated)")
+        assert len(occurrences) == 1, "Deduplication failed!"
+        print(f"   - إجمالي الشعب المراقبة في النظام: {len(unique_sections)}")
 
     # 5. Worker Alert Logic & State Transition Simulation
     print("\n[5/5] جاري محاكاة انتقال الحالة من ممتلئة (FULL) إلى شاغرة (AVAILABLE)...")

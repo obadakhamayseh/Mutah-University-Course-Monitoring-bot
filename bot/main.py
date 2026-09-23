@@ -75,6 +75,10 @@ async def start_health_server(port: int):
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Log the error and send a friendly message if possible."""
+    err_str = str(context.error or "")
+    if "Message is not modified" in err_str:
+        return
+
     logger.error("Exception while handling an update:", exc_info=context.error)
     if isinstance(update, Update) and update.effective_message:
         try:
