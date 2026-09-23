@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import sys
+import os
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import (
@@ -40,6 +41,36 @@ logging.basicConfig(
     level=getattr(logging, LOG_LEVEL.upper(), logging.INFO),
 )
 logger = logging.getLogger("CourseBot")
+
+
+async def start_health_server(port: int):
+    """
+    Lightweight HTTP server to satisfy Render/Railway/Koyeb health-checks
+    allowing the bot to run as a free web service.
+    """
+    async def handle_client(reader, writer):
+        try:
+            await reader.read(1024)
+            response = (
+                "HTTP/1.1 200 OK\r\n"
+                "Content-Type: text/plain; charset=utf-8\r\n"
+                "Connection: close\r\n\r\n"
+                "Mutah Course Bot is Running Healthy!\n"
+            )
+            writer.write(response.encode("utf-8"))
+            await writer.drain()
+        except Exception:
+            pass
+        finally:
+            writer.close()
+            try:
+                await writer.wait_closed()
+            except Exception:
+                pass
+
+    server = await asyncio.start_server(handle_client, "0.0.0.0", port)
+    logger.info(f"🌐 Health-check HTTP server listening on port {port}")
+    return server
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -101,6 +132,15 @@ async def main() -> None:
     # 1. Initialize Database tables
     logger.info("Initializing database...")
     await init_db()
+
+    # Optional: Start health server if running on cloud platforms (Render, Railway, Koyeb)
+    port_env = os.getenv("PORT")
+    if port_env:
+        try:
+            port = int(port_env)
+            await start_health_server(port)
+        except Exception as e:
+            logger.warning(f"Could not bind health-check server on port {port_env}: {e}")
 
     # 2. Initialize Fetcher
     fetcher = MutahFetcher(
