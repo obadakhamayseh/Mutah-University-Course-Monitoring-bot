@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: mutah_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mutah_user
+      POSTGRES_PASSWORD: mutah_password
+      POSTGRES_DB: mutah_courses
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mutah_user -d mutah_courses"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  bot:
+    build: .
+    container_name: mutah_course_bot
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://mutah_user:mutah_password@postgres:5432/mutah_courses
+    volumes:
+      - .:/app
+
+volumes:
+  postgres_data:

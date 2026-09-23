@@ -1,0 +1,19 @@
+[Unit]
+Description=Mutah University Course Monitoring Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/Course_sub_proj
+ExecStart=/usr/bin/python3 run.py
+Restart=always
+RestartSec=10
+EnvironmentFile=/root/Course_sub_proj/.env
+
+# Standard output and logging
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
