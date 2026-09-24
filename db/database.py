@@ -6,13 +6,22 @@ from .models import Base
 
 logger = logging.getLogger(__name__)
 
-connect_args = {"timeout": 30} if "sqlite" in DATABASE_URL else {}
+engine_kwargs = {
+    "echo": False,
+    "future": True,
+}
+
+if "sqlite" in DATABASE_URL:
+    engine_kwargs["connect_args"] = {"timeout": 30}
+else:
+    engine_kwargs["pool_pre_ping"] = True
+    engine_kwargs["pool_recycle"] = 300
+    engine_kwargs["pool_size"] = 10
+    engine_kwargs["max_overflow"] = 20
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=False,
-    future=True,
-    connect_args=connect_args,
+    **engine_kwargs,
 )
 
 async_session = async_sessionmaker(

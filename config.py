@@ -10,9 +10,11 @@ load_dotenv(BASE_DIR / ".env")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 # Database Configuration
-# Default is async SQLite; can be overridden with async PostgreSQL:
-# e.g.: postgresql+asyncpg://user:password@localhost:5432/mutah_db
-DATABASE_URL = os.getenv("DATABASE_URL", f"sqlite+aiosqlite:///{BASE_DIR / 'mutah_bot.db'}")
+# Default to Supabase PostgreSQL for cloud persistence across restarts / Render spin-downs:
+DEFAULT_SUPABASE_URL = "postgresql+asyncpg://postgres:etpPil2MOmHqqnJp@db.fnpdmupnbrgopfnnmfgu.supabase.co:5432/postgres"
+DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_SUPABASE_URL)
+if ("sqlite" in DATABASE_URL) and not os.getenv("USE_LOCAL_SQLITE"):
+    DATABASE_URL = DEFAULT_SUPABASE_URL
 
 # University Portal Configuration
 PORTAL_URL = os.getenv("PORTAL_URL", "https://subp.mutah.edu.jo/")
