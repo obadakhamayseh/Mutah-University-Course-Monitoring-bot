@@ -12,6 +12,7 @@ ENV/
 
 # Database files
 *.db
+*.db-*
 *.sqlite
 *.sqlite3
 
