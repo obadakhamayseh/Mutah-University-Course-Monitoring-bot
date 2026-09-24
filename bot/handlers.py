@@ -821,6 +821,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
 
     elif data == "show_help":
+        is_admin = bool(ADMIN_TELEGRAM_ID and int(user.id) == int(ADMIN_TELEGRAM_ID))
         help_text = (
             "📖 <b>طريقة استخدام البوت السريعة</b> 💡\n\n"
             "✨ <b>لا داعي لكتابة أوامر يدوية بعد الآن!</b>\n"
@@ -834,7 +835,7 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(
             help_text,
             parse_mode=ParseMode.HTML,
-            reply_markup=get_main_menu_keyboard(),
+            reply_markup=get_main_menu_keyboard(is_admin=is_admin),
         )
 
     elif data == "admin_panel" or data == "admin_stats":
@@ -899,11 +900,16 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup=get_admin_dashboard_keyboard(),
         )
 
-    elif data == "admin_back":
-        is_admin = bool(ADMIN_TELEGRAM_ID and user.id == ADMIN_TELEGRAM_ID)
+    elif data == "main_menu" or data == "admin_back":
+        is_admin = bool(ADMIN_TELEGRAM_ID and int(user.id) == int(ADMIN_TELEGRAM_ID))
+        user_name = html.escape(user.first_name or "صديقي")
         welcome_text = (
-            "مرحباً بك مجدداً في <b>بوت مراقبة وتتبع مواد جامعة مؤتة</b> 🎓✨\n\n"
-            "فقط أرسل <b>رقم المادة</b> مباشرة هنا (مثال: <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!"
+            f"مرحباً بك يا <b>{user_name}</b> في <b>بوت مراقبة وتتبع مواد جامعة مؤتة</b> 🎓✨\n\n"
+            "⚡️ <b>طريقة الاستخدام السريعة:</b>\n"
+            "فقط أرسل <b>رقم المادة</b> مباشرة هنا (مثال: <code>0209100</code>).\n"
+            "وسيعرض لك البوت فوراً جميع شُعب المادة مع أزرار تفاعلية للمراقبة والتتبع.\n\n"
+            "📊 <b>إدارة الشُعب المراقبة:</b>\n"
+            "اضغط على زر <b>«شُعبي المراقبة»</b> بالأسفل لإلغاء أو متابعة أي شعبة بنقرة واحدة!"
         )
         await query.edit_message_text(
             welcome_text,

@@ -32,6 +32,10 @@ def get_section_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarku
             ),
         ],
         [
+            InlineKeyboardButton("🔙 رجوع لشُعب المادة", callback_data=f"refresh_course:{course_id}"),
+            InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"),
+        ],
+        [
             InlineKeyboardButton("🌐 بوابة جريدة المواد", url=PORTAL_URL),
         ],
     ]
@@ -52,6 +56,10 @@ def get_track_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarkup:
             ),
         ],
         [
+            InlineKeyboardButton("🔙 رجوع لشُعب المادة", callback_data=f"refresh_course:{course_id}"),
+            InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"),
+        ],
+        [
             InlineKeyboardButton("🌐 بوابة جريدة المواد", url=PORTAL_URL),
         ],
     ]
@@ -66,7 +74,7 @@ def get_unwatch_confirm_keyboard(course_id: str, section_no: str) -> InlineKeybo
                 "نعم، إلغاء المراقبة",
                 callback_data=f"unwatch_confirm:{course_id}:{section_no}",
             ),
-            InlineKeyboardButton("تراجع", callback_data="cancel"),
+            InlineKeyboardButton("🔙 تراجع ورجوع", callback_data="show_list"),
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -80,7 +88,7 @@ def get_untrack_confirm_keyboard(course_id: str, section_no: str) -> InlineKeybo
                 "نعم، إلغاء التتبع",
                 callback_data=f"untrack_confirm:{course_id}:{section_no}",
             ),
-            InlineKeyboardButton("تراجع", callback_data="cancel"),
+            InlineKeyboardButton("🔙 تراجع ورجوع", callback_data="show_list"),
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -105,6 +113,9 @@ def get_course_sections_keyboard(course_id: str, sections: list) -> InlineKeyboa
 
     keyboard.append([
         InlineKeyboardButton("🔄 تحديث الكل", callback_data=f"refresh_course:{course_id}"),
+        InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"),
+    ])
+    keyboard.append([
         InlineKeyboardButton("🌐 بوابة التسجيل", url=PORTAL_URL),
     ])
     return InlineKeyboardMarkup(keyboard)
@@ -119,7 +130,10 @@ def get_quick_sub_keyboard(course_id: str, section_no: str, is_full: bool) -> In
         ],
         [
             InlineKeyboardButton("🔄 تحديث", callback_data=f"refresh:{course_id}:{section_no}"),
-            InlineKeyboardButton("🔙 رجوع للشعب", callback_data=f"refresh_course:{course_id}"),
+            InlineKeyboardButton("🔙 رجوع للشُعب", callback_data=f"refresh_course:{course_id}"),
+        ],
+        [
+            InlineKeyboardButton("🏠 القائمة الرئيسية", callback_data="main_menu"),
         ],
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -136,6 +150,9 @@ def get_list_dashboard_keyboard(subs: list) -> InlineKeyboardMarkup:
 
     keyboard.append([
         InlineKeyboardButton("🔄 تحديث القائمة", callback_data="refresh_list"),
+        InlineKeyboardButton("🔙 القائمة الرئيسية", callback_data="main_menu"),
+    ])
+    keyboard.append([
         InlineKeyboardButton("🌐 بوابة الجامعة", url=PORTAL_URL),
     ])
     return InlineKeyboardMarkup(keyboard)
@@ -168,10 +185,11 @@ def get_admin_dashboard_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton("🔄 تحديث الإحصائيات", callback_data="admin_panel"),
-            InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="admin_back"),
+            InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="main_menu"),
         ],
     ]
     return InlineKeyboardMarkup(keyboard)
+
 
 
 
