@@ -141,7 +141,7 @@ def get_list_dashboard_keyboard(subs: list) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(keyboard)
 
 
-def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+def get_main_menu_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     """Main menu keyboard shown with /start and /help."""
     keyboard = [
         [
@@ -152,7 +152,28 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
             InlineKeyboardButton("🌐 بوابة التسجيل", url=PORTAL_URL),
         ],
     ]
+    if is_admin:
+        keyboard.append([
+            InlineKeyboardButton("👑 لوحة تحكم الأدمن (قاعدة البيانات)", callback_data="admin_panel"),
+        ])
     return InlineKeyboardMarkup(keyboard)
+
+
+def get_admin_dashboard_keyboard() -> InlineKeyboardMarkup:
+    """Keyboard for Admin Control Panel."""
+    keyboard = [
+        [
+            InlineKeyboardButton("👥 عرض الطلاب المسجلين", callback_data="admin_users"),
+            InlineKeyboardButton("📊 إحصائيات عامة", callback_data="admin_stats"),
+        ],
+        [
+            InlineKeyboardButton("🔄 تحديث الإحصائيات", callback_data="admin_panel"),
+            InlineKeyboardButton("🔙 رجوع للقائمة الرئيسية", callback_data="admin_back"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 
 
 

@@ -36,6 +36,7 @@ from bot.handlers import (
     untrack_command,
     check_command,
     list_command,
+    admin_command,
     callback_query_handler,
     text_message_handler,
 )
@@ -111,6 +112,7 @@ def build_application(token: str, fetcher: MutahFetcher) -> Application:
     application.add_handler(CommandHandler("untrack", untrack_command))
     application.add_handler(CommandHandler("check", check_command))
     application.add_handler(CommandHandler("list", list_command))
+    application.add_handler(CommandHandler("admin", admin_command))
 
     # Register inline button handler
     application.add_handler(CallbackQueryHandler(callback_query_handler))

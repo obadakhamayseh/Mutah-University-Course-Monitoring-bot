@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
-from sqlalchemy import select, update, delete, distinct
+from typing import List, Optional, Tuple, Dict, Any
+from sqlalchemy import select, update, delete, distinct, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from .models import User, Subscription, SectionCache, NotificationLog
 
@@ -289,3 +289,50 @@ async def log_notification(
     )
     session.add(log_entry)
     await session.commit()
+
+
+async def get_admin_stats(session: AsyncSession) -> Dict[str, Any]:
+    """Retrieves overall database statistics for the bot admin."""
+    # Total users
+    users_cnt = (await session.execute(select(func.count(User.id)))).scalar_one() or 0
+    # Active subscriptions
+    active_subs_cnt = (await session.execute(
+        select(func.count(Subscription.id)).where(Subscription.is_active.is_(True))
+    )).scalar_one() or 0
+    # Seat vs Change subs
+    seat_subs_cnt = (await session.execute(
+        select(func.count(Subscription.id)).where(Subscription.is_active.is_(True), Subscription.sub_type == "SEAT")
+    )).scalar_one() or 0
+    change_subs_cnt = (await session.execute(
+        select(func.count(Subscription.id)).where(Subscription.is_active.is_(True), Subscription.sub_type == "CHANGE")
+    )).scalar_one() or 0
+    # Unique distinct sections being monitored
+    unique_sections_cnt = len(await get_unique_active_sections(session))
+    # Total notifications sent
+    notif_cnt = (await session.execute(select(func.count(NotificationLog.id)))).scalar_one() or 0
+
+    return {
+        "total_users": users_cnt,
+        "active_subs": active_subs_cnt,
+        "seat_subs": seat_subs_cnt,
+        "change_subs": change_subs_cnt,
+        "unique_sections": unique_sections_cnt,
+        "total_notifications": notif_cnt,
+    }
+
+
+async def get_all_users_with_subs(session: AsyncSession, limit: int = 50) -> List[Tuple[User, int]]:
+    """Retrieves users along with their count of active subscriptions."""
+    stmt = (
+        select(
+            User,
+            func.count(Subscription.id).label("subs_count")
+        )
+        .outerjoin(Subscription, (Subscription.user_id == User.id) & (Subscription.is_active.is_(True)))
+        .group_by(User.id)
+        .order_by(User.created_at.desc())
+        .limit(limit)
+    )
+    result = await session.execute(stmt)
+    return [(row[0], row[1]) for row in result.all()]
+

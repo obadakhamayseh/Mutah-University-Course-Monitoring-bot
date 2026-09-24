@@ -5,6 +5,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
+from config import ADMIN_TELEGRAM_ID
 from fetcher.mutah import MutahFetcher, SectionInfo
 from db.database import async_session
 from db.crud import (
@@ -14,6 +15,8 @@ from db.crud import (
     get_user_subscriptions,
     get_section_cache,
     update_section_cache,
+    get_admin_stats,
+    get_all_users_with_subs,
 )
 from bot.keyboards import (
     get_section_keyboard,
@@ -24,6 +27,7 @@ from bot.keyboards import (
     get_quick_sub_keyboard,
     get_list_dashboard_keyboard,
     get_main_menu_keyboard,
+    get_admin_dashboard_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,6 +89,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         )
 
     user_name = html.escape(user.first_name or "صديقي")
+    is_admin = (ADMIN_TELEGRAM_ID is not None and user.id == ADMIN_TELEGRAM_ID)
+
     welcome_text = (
         f"مرحباً بك يا <b>{user_name}</b> في <b>بوت مراقبة وتتبع مواد جامعة مؤتة</b> 🎓✨\n\n"
         "⚡️ <b>طريقة الاستخدام السريعة (بدون كتابة أوامر):</b>\n"
@@ -100,12 +106,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     await update.message.reply_text(
         welcome_text,
         parse_mode=ParseMode.HTML,
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(is_admin=is_admin),
     )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /help command."""
+    user = update.effective_user
+    is_admin = bool(user and ADMIN_TELEGRAM_ID is not None and user.id == ADMIN_TELEGRAM_ID)
+
     help_text = (
         "📖 <b>دليل استخدام بوت جامعة مؤتة</b> 💡\n\n"
         "✨ <b>لا داعي لكتابة أوامر يدوية بعد الآن!</b>\n"
@@ -119,7 +128,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     await update.message.reply_text(
         help_text,
         parse_mode=ParseMode.HTML,
-        reply_markup=get_main_menu_keyboard(),
+        reply_markup=get_main_menu_keyboard(is_admin=is_admin),
     )
 
 
@@ -828,17 +837,133 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             reply_markup=get_main_menu_keyboard(),
         )
 
+    elif data == "admin_panel" or data == "admin_stats":
+        if not ADMIN_TELEGRAM_ID or user.id != ADMIN_TELEGRAM_ID:
+            await query.answer("⛔️ عذراً، هذه اللوحة مخصصة للأدمن فقط.", show_alert=True)
+            return
+
+        async with async_session() as session:
+            stats = await get_admin_stats(session)
+
+        text = (
+            "👑 <b>لوحة تحكم الأدمن — إحصائيات قاعدة البيانات</b> 📊\n\n"
+            f"👥 <b>إجمالي المستخدمين المسجلين:</b> <code>{stats['total_users']}</code>\n"
+            f"📌 <b>إجمالي الاشتراكات النشطة:</b> <code>{stats['active_subs']}</code>\n"
+            f"   • 🔔 مراقبة المقاعد: <code>{stats['seat_subs']}</code>\n"
+            f"   • 👁 تتبع التغييرات: <code>{stats['change_subs']}</code>\n"
+            f"🔍 <b>عدد الشُعب الفريدة قيد المراقبة:</b> <code>{stats['unique_sections']}</code>\n"
+            f"📢 <b>إجمالي الإشعارات المرسلة:</b> <code>{stats['total_notifications']}</code>\n\n"
+            f"⏱ <i>تم التحديث: {datetime.now().strftime('%I:%M:%S %p')}</i>"
+        )
+        try:
+            await query.edit_message_text(
+                text,
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_admin_dashboard_keyboard(),
+            )
+            await query.answer("تم تحديث إحصائيات الأدمن بنجاح ✅")
+        except Exception as e:
+            if "Message is not modified" in str(e):
+                await query.answer("الإحصائيات محدثة بالفعل ✅")
+            else:
+                raise
+
+    elif data == "admin_users":
+        if not ADMIN_TELEGRAM_ID or user.id != ADMIN_TELEGRAM_ID:
+            await query.answer("⛔️ عذراً، هذه اللوحة مخصصة للأدمن فقط.", show_alert=True)
+            return
+
+        async with async_session() as session:
+            users_list = await get_all_users_with_subs(session, limit=40)
+
+        if not users_list:
+            await query.answer("لا يوجد مستخدمين مسجلين بعد.", show_alert=True)
+            return
+
+        lines = [f"👥 <b>قائمة الطلاب والمستخدمين المسجلين في البوت ({len(users_list)}):</b>\n"]
+        for i, (u, subs_cnt) in enumerate(users_list, 1):
+            name = html.escape(u.first_name or "بدون اسم")
+            uname = f"@{html.escape(u.username)}" if u.username else "بدون يوزرنيم"
+            lines.append(
+                f"{i}. <b>{name}</b> ({uname})\n"
+                f"   • آيدي تيليجرام: <code>{u.telegram_id}</code> | شُعب يراقبها: <b>{subs_cnt}</b>"
+            )
+
+        text = "\n".join(lines)
+        if len(text) > 4000:
+            text = text[:3900] + "\n... (تم اختصار القائمة لتناسب الحجم)"
+
+        await query.edit_message_text(
+            text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_admin_dashboard_keyboard(),
+        )
+
+    elif data == "admin_back":
+        is_admin = bool(ADMIN_TELEGRAM_ID and user.id == ADMIN_TELEGRAM_ID)
+        welcome_text = (
+            "مرحباً بك مجدداً في <b>بوت مراقبة وتتبع مواد جامعة مؤتة</b> 🎓✨\n\n"
+            "فقط أرسل <b>رقم المادة</b> مباشرة هنا (مثال: <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!"
+        )
+        await query.edit_message_text(
+            welcome_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_main_menu_keyboard(is_admin=is_admin),
+        )
+
     elif data == "cancel":
         await query.edit_message_text("تم الإلغاء.", parse_mode=ParseMode.HTML)
+
+
+async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles /admin command strictly for ADMIN_TELEGRAM_ID."""
+    user = update.effective_user
+    if not user or not ADMIN_TELEGRAM_ID or user.id != ADMIN_TELEGRAM_ID:
+        if update.message:
+            await update.message.reply_text("⛔️ هذا الأمر مخصص لمدير البوت فقط.", parse_mode=ParseMode.HTML)
+        return
+
+    async with async_session() as session:
+        stats = await get_admin_stats(session)
+
+    text = (
+        "👑 <b>أهلاً بك يا مدير النظام في لوحة تحكم الأدمن</b> 📊\n\n"
+        f"👥 <b>إجمالي الطلاب المسجلين:</b> <code>{stats['total_users']}</code>\n"
+        f"📌 <b>إجمالي الاشتراكات النشطة:</b> <code>{stats['active_subs']}</code>\n"
+        f"   • 🔔 مراقبة المقاعد: <code>{stats['seat_subs']}</code>\n"
+        f"   • 👁 تتبع التغييرات: <code>{stats['change_subs']}</code>\n"
+        f"🔍 <b>شُعب فريدة قيد المراقبة الآن:</b> <code>{stats['unique_sections']}</code>\n"
+        f"📢 <b>إشعارات مرسلة:</b> <code>{stats['total_notifications']}</code>\n"
+    )
+    await update.message.reply_text(
+        text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_admin_dashboard_keyboard(),
+    )
+
 
 
 async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
     Handles regular text messages. If user types a course ID directly (e.g., 0209100 or 209100),
     automatically fetch and display all sections with interactive buttons!
+    Also ensures the user profile is stored in the database.
     """
-    if not update.message or not update.message.text:
+    user = update.effective_user
+    if not user or not update.message or not update.message.text:
         return
+
+    # Automatically record/update any user interacting with the bot
+    try:
+        async with async_session() as session:
+            await get_or_create_user(
+                session=session,
+                telegram_id=user.id,
+                username=user.username,
+                first_name=user.first_name,
+            )
+    except Exception as e:
+        logger.error(f"Error recording user: {e}")
 
     text = update.message.text.strip()
     # Check if text looks like a course ID (5 to 10 digits)
