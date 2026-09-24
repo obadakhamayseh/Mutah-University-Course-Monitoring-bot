@@ -44,17 +44,20 @@ async def add_subscription(
     course_id: str,
     section_no: str,
     course_name: Optional[str] = None,
+    sub_type: str = "SEAT",
 ) -> Tuple[Subscription, bool]:
     """
-    Returns (subscription, created_bool)
+    Returns (subscription, created_bool). sub_type can be 'SEAT' or 'CHANGE'.
     """
     course_id = str(course_id).strip()
     section_no = str(section_no).strip()
+    sub_type = str(sub_type).strip().upper()
 
     stmt = select(Subscription).where(
         Subscription.user_id == user_id,
         Subscription.course_id == course_id,
         Subscription.section_no == section_no,
+        Subscription.sub_type == sub_type,
     )
     result = await session.execute(stmt)
     sub = result.scalar_one_or_none()
@@ -75,6 +78,7 @@ async def add_subscription(
         course_id=course_id,
         section_no=section_no,
         course_name=course_name,
+        sub_type=sub_type,
         is_active=True,
     )
     session.add(sub)
@@ -88,6 +92,7 @@ async def remove_subscription(
     user_id: int,
     course_id: str,
     section_no: str,
+    sub_type: Optional[str] = None,
 ) -> bool:
     course_id = str(course_id).strip()
     section_no = str(section_no).strip()
@@ -97,6 +102,9 @@ async def remove_subscription(
         Subscription.course_id == course_id,
         Subscription.section_no == section_no,
     )
+    if sub_type:
+        stmt = stmt.where(Subscription.sub_type == str(sub_type).strip().upper())
+
     result = await session.execute(stmt)
     await session.commit()
     return result.rowcount > 0
@@ -106,10 +114,13 @@ async def get_user_subscriptions(
     session: AsyncSession,
     user_id: int,
     active_only: bool = True,
+    sub_type: Optional[str] = None,
 ) -> List[Subscription]:
     stmt = select(Subscription).where(Subscription.user_id == user_id)
     if active_only:
         stmt = stmt.where(Subscription.is_active.is_(True))
+    if sub_type:
+        stmt = stmt.where(Subscription.sub_type == str(sub_type).strip().upper())
     stmt = stmt.order_by(Subscription.created_at.desc())
     result = await session.execute(stmt)
     return list(result.scalars().all())
@@ -120,7 +131,7 @@ async def get_unique_active_sections(
 ) -> List[Tuple[str, str]]:
     """
     Deduplication query: Returns distinct (course_id, section_no) pairs
-    that have at least one active subscriber.
+    that have at least one active subscriber (SEAT or CHANGE).
     """
     stmt = (
         select(distinct(Subscription.course_id), Subscription.section_no)
@@ -134,9 +145,11 @@ async def get_subscribers_for_section(
     session: AsyncSession,
     course_id: str,
     section_no: str,
+    sub_type: Optional[str] = None,
 ) -> List[Tuple[Subscription, User]]:
     """
-    Returns (Subscription, User) pairs for all active subscribers of a section.
+    Returns (Subscription, User) pairs for active subscribers of a section,
+    optionally filtered by sub_type ('SEAT' or 'CHANGE').
     """
     stmt = (
         select(Subscription, User)
@@ -147,6 +160,9 @@ async def get_subscribers_for_section(
             Subscription.is_active.is_(True),
         )
     )
+    if sub_type:
+        stmt = stmt.where(Subscription.sub_type == str(sub_type).strip().upper())
+
     result = await session.execute(stmt)
     return list(result.all())
 
@@ -173,6 +189,12 @@ async def update_section_cache(
     enrolled: int,
     available_seats: int,
     is_full: bool,
+    instructor: Optional[str] = None,
+    days: Optional[str] = None,
+    time_from: Optional[str] = None,
+    time_to: Optional[str] = None,
+    room: Optional[str] = None,
+    notes: Optional[str] = None,
 ) -> SectionCache:
     course_id = str(course_id).strip()
     section_no = str(section_no).strip()
@@ -185,18 +207,30 @@ async def update_section_cache(
             course_id=course_id,
             section_no=section_no,
             course_name=course_name,
+            instructor=instructor,
             capacity=capacity,
             enrolled=enrolled,
             available_seats=available_seats,
+            days=days,
+            time_from=time_from,
+            time_to=time_to,
+            room=room,
+            notes=notes,
             is_full=is_full,
             last_checked_at=now,
         )
         session.add(cache)
     else:
         cache.course_name = course_name or cache.course_name
+        cache.instructor = instructor or cache.instructor
         cache.capacity = capacity
         cache.enrolled = enrolled
         cache.available_seats = available_seats
+        cache.days = days or cache.days
+        cache.time_from = time_from or cache.time_from
+        cache.time_to = time_to or cache.time_to
+        cache.room = room or cache.room
+        cache.notes = notes if notes is not None else cache.notes
         cache.is_full = is_full
         cache.last_checked_at = now
 

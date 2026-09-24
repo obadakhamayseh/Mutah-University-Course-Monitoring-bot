@@ -17,13 +17,15 @@ from db.crud import (
 )
 from bot.keyboards import (
     get_section_keyboard,
+    get_track_keyboard,
     get_unwatch_confirm_keyboard,
+    get_untrack_confirm_keyboard,
 )
 
 logger = logging.getLogger(__name__)
 
 
-def format_section_card(section: SectionInfo, is_watched: bool = False) -> str:
+def format_section_card(section: SectionInfo, is_watched: bool = False, watch_type: str = "SEAT") -> str:
     """Formats a detailed section information card in Arabic using HTML."""
     status_emoji = "🔴" if section.is_full else "🟢"
     status_text = "ممتلئة (لا يوجد مقاعد)" if section.is_full else f"متاحة ({section.available_seats} مقاعد شاغرة)"
@@ -56,7 +58,10 @@ def format_section_card(section: SectionInfo, is_watched: bool = False) -> str:
     lines.append(f"⏱ <b>آخر فحص:</b> {check_time}")
 
     if is_watched:
-        lines.append("🔔 <b>حالة المراقبة:</b> مفعلة (ستصلك رسالة فور توفر مقعد)")
+        if watch_type == "CHANGE":
+            lines.append("👁 <b>حالة التتبع:</b> مفعلة (ستصلك رسالة عند أي تغيير يطرأ على الشعبة)")
+        else:
+            lines.append("🔔 <b>حالة المراقبة:</b> مفعلة (ستصلك رسالة فور توفر مقعد شاغر)")
 
     return "\n".join(lines)
 
@@ -77,15 +82,21 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     user_name = html.escape(user.first_name or "صديقي")
     welcome_text = (
-        f"مرحباً بك يا <b>{user_name}</b> في <b>بوت مراقبة مواد جامعة مؤتة</b> 🎓\n\n"
-        "هذا البوت يساعدك على مراقبة الشُعب الدراسية المغلقة، وإشعارك في اللحظة التي يتوفر فيها أي مقعد شاغر فوراً! ⚡️\n\n"
+        f"مرحباً بك يا <b>{user_name}</b> في <b>بوت مراقبة وتتبع مواد جامعة مؤتة</b> 🎓\n\n"
+        "يقدم البوت ميزتين منفصلتين لمساعدتك في التسجيل:\n"
+        "1️⃣ <b>مراقبة المقاعد الشاغرة:</b> إشعارك فور فتح أي شعبة ممتلئة.\n"
+        "2️⃣ <b>تتبع التغييرات:</b> إشعارك بأي تعديل على الشعبة (تغيير مدرس، قاعة، موعد، مسجلين).\n\n"
         "📋 <b>الأوامر المتاحة:</b>\n"
-        "• <code>/watch &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code> - بدء مراقبة شعبة (مثال: <code>/watch 0209100 1</code>)\n"
-        "• <code>/unwatch &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code> - إلغاء مراقبة شعبة\n"
-        "• <code>/check &lt;رقم_المادة&gt; [الشعبة]</code> - فحص فوري لحالة مادة أو شعبة\n"
-        "• <code>/list</code> - عرض الشعب التي تراقبها حالياً\n"
-        "• <code>/help</code> - عرض شرح استخدام البوت بالتفصيل\n\n"
-        "💡 <b>ابدأ الآن بإرسال:</b> <code>/watch 0209100 1</code>"
+        "• <code>/watch &lt;المادة&gt; &lt;الشعبة&gt;</code> - مراقبة توفر مقعد شاغر في شعبة ممتلئة\n"
+        "• <code>/unwatch &lt;المادة&gt; &lt;الشعبة&gt;</code> - إلغاء مراقبة المقاعد\n"
+        "• <code>/track &lt;المادة&gt; &lt;الشعبة&gt;</code> - تتبع أي تغييرات تطرأ على الشعبة 👁\n"
+        "• <code>/untrack &lt;المادة&gt; &lt;الشعبة&gt;</code> - إلغاء تتبع التغييرات\n"
+        "• <code>/check &lt;المادة&gt; [الشعبة]</code> - فحص فوري لحالة مادة أو شعبة\n"
+        "• <code>/list</code> - عرض كافة المواد والشعب المراقبة\n"
+        "• <code>/help</code> - شرح مفصل لطريقة الاستخدام\n\n"
+        "💡 <b>أمثلة سريعة:</b>\n"
+        "• لمراقبة مقعد شاغر: <code>/watch 0209100 1</code>\n"
+        "• لتتبع أي تغيير في الشعبة: <code>/track 0209100 1</code>"
     )
 
     await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
@@ -94,26 +105,29 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /help command."""
     help_text = (
-        "📖 <b>دليل استخدام بوت مراقبة مقاعد جامعة مؤتة</b>\n\n"
-        "1️⃣ <b>كيف أراقب شعبة ممتلئة؟</b>\n"
-        "اكتب الأمر <code>/watch</code> متبوعاً برقم المادة ثم رقم الشعبة:\n"
-        "<code>/watch 0209100 1</code>\n"
-        "يقوم البوت بالتحقق من الشعبة فوراً وتفعيل المراقبة الآلية في الخلفية.\n\n"
-        "2️⃣ <b>كيف يتم الإشعار؟</b>\n"
-        "يقوم النظام بفحص بوابة التسجيل دورياً، وفور إلغاء تسجيل أي طالب أو زيادة السعة، "
-        "ستصلك رسالة تنبيه عاجلة برابط البوابة لحجز المقعد مباشرة.\n\n"
-        "3️⃣ <b>كيف أفحص مادة دون مراقبتها؟</b>\n"
-        "استخدم الأمر <code>/check</code>:\n"
-        "• <code>/check 0209100 1</code> (لفحص شعبة معينة)\n"
-        "• <code>/check 0209100</code> (لعرض كافة شُعب المادة)\n\n"
-        "4️⃣ <b>إلغاء المراقبة:</b>\n"
-        "<code>/unwatch 0209100 1</code> أو عبر الضغط على زر الإلغاء في قائمة <code>/list</code>."
+        "📖 <b>دليل استخدام بوت جامعة مؤتة</b>\n\n"
+        "🎯 <b>الفرق بين الميزتين:</b>\n\n"
+        "1️⃣ <b>ميزة مراقبة المقاعد الشاغرة (/watch):</b>\n"
+        "• مخصصة للشعب المغلقة والممتلئة.\n"
+        "• يفحص البوت الشعبة، وفور شغور أي مقعد يرسل لك تنبيهاً عاجلاً.\n"
+        "• الأمر: <code>/watch &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n"
+        "• الإلغاء: <code>/unwatch &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n\n"
+        "2️⃣ <b>ميزة تتبع تفاصيل الشعبة والتغييرات (/track):</b>\n"
+        "• ترصد أي تعديل يطرأ على الشعبة سواء كانت ممتلئة أو غير ممتلئة:\n"
+        "  - زيادة أو نقصان عدد المسجلين أو السعة.\n"
+        "  - تغيير المدرس.\n"
+        "  - تغيير القاعة أو الموعد أو الأيام أو الملاحظات.\n"
+        "• الأمر: <code>/track &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n"
+        "• الإلغاء: <code>/untrack &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n\n"
+        "🔍 <b>الفحص اللحظي (/check):</b>\n"
+        "• <code>/check 0209100</code> (عرض جميع شعب المادة)\n"
+        "• <code>/check 0209100 1</code> (فحص شعبة معينة مباشرة)"
     )
     await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
 
 
 async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /watch <course_id> <section_no>."""
+    """Handles /watch <course_id> <section_no> (Seat Availability)."""
     user = update.effective_user
     if not user or not update.message:
         return
@@ -122,7 +136,7 @@ async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if len(args) < 2:
         await update.message.reply_text(
             "⚠️ <b>صيغة الأمر غير صحيحة.</b>\n"
-            "الاستخدام الصحيح:\n"
+            "الاستخدام الصحيح لمراقبة المقاعد:\n"
             "<code>/watch &lt;رقم_المادة&gt; &lt;رقم_الشعبة&gt;</code>\n\n"
             "مثال: <code>/watch 0209100 1</code>",
             parse_mode=ParseMode.HTML,
@@ -156,12 +170,13 @@ async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             first_name=user.first_name,
         )
 
-        sub, created = await add_subscription(
+        await add_subscription(
             session=session,
             user_id=db_user.id,
             course_id=course_id,
             section_no=section_no,
             course_name=section_info.course_name,
+            sub_type="SEAT",
         )
 
         await update_section_cache(
@@ -173,19 +188,25 @@ async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             enrolled=section_info.enrolled,
             available_seats=section_info.available_seats,
             is_full=section_info.is_full,
+            instructor=section_info.instructor,
+            days=section_info.days,
+            time_from=section_info.time_from,
+            time_to=section_info.time_to,
+            room=section_info.room,
+            notes=section_info.notes,
         )
 
-    card_text = format_section_card(section_info, is_watched=True)
+    card_text = format_section_card(section_info, is_watched=True, watch_type="SEAT")
 
     if section_info.available_seats > 0:
         reply_text = (
             "🟢 <b>تنبيه: يوجد مقاعد متاحة بالفعل الآن!</b>\n\n"
             f"{card_text}\n\n"
-            "⚡️ سارع بالتسجيل الآن قبل اكتمال السعة! تم حفظ المراقبة في حال أُغلقت لاحقاً."
+            "⚡️ سارع بالتسجيل الآن قبل اكتمال السعة! تم تفعيل المراقبة في حال أُغلقت لاحقاً."
         )
     else:
         reply_text = (
-            "✅ <b>تمت إضافة المراقبة بنجاح!</b>\n\n"
+            "✅ <b>تم تفعيل مراقبة المقاعد الشاغرة بنجاح!</b>\n\n"
             f"{card_text}\n\n"
             "📡 سنقوم بمراقبة هذه الشعبة تلقائياً وإشعارك فور توفر أي مقعد شاغر."
         )
@@ -219,16 +240,138 @@ async def unwatch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     async with async_session() as session:
         db_user = await get_or_create_user(session, user.id)
-        removed = await remove_subscription(session, db_user.id, course_id, section_no)
+        removed = await remove_subscription(session, db_user.id, course_id, section_no, sub_type="SEAT")
 
     if removed:
         await update.message.reply_text(
-            f"✅ تم إلغاء مراقبة الشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> بنجاح.",
+            f"✅ تم إلغاء مراقبة المقاعد للشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> بنجاح.",
             parse_mode=ParseMode.HTML,
         )
     else:
         await update.message.reply_text(
-            f"ℹ️ أنت لا تراقب الشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> حالياً.",
+            f"ℹ️ أنت لا تراقب مقاعد الشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> حالياً.",
+            parse_mode=ParseMode.HTML,
+        )
+
+
+async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles /track <course_id> <section_no> (Any Detail Changes)."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text(
+            "⚠️ <b>صيغة الأمر غير صحيحة.</b>\n"
+            "الاستخدام الصحيح لتتبع التغييرات:\n"
+            "<code>/track &lt;رقم_المادة&gt; &lt;رقم_الشعبة&gt;</code>\n\n"
+            "مثال: <code>/track 0209100 1</code>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    course_id = args[0].strip()
+    section_no = args[1].strip()
+
+    status_msg = await update.message.reply_text(
+        f"⏳ جاري فحص الشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> على موقع الجامعة وتفعيل التتبع...",
+        parse_mode=ParseMode.HTML,
+    )
+
+    fetcher: MutahFetcher = context.bot_data["fetcher"]
+    section_info = await fetcher.get_section_async(course_id, section_no)
+
+    if not section_info:
+        await status_msg.edit_text(
+            f"❌ لم يتم العثور على الشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> في جريدة المواد.",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    async with async_session() as session:
+        db_user = await get_or_create_user(
+            session=session,
+            telegram_id=user.id,
+            username=user.username,
+            first_name=user.first_name,
+        )
+
+        await add_subscription(
+            session=session,
+            user_id=db_user.id,
+            course_id=course_id,
+            section_no=section_no,
+            course_name=section_info.course_name,
+            sub_type="CHANGE",
+        )
+
+        await update_section_cache(
+            session=session,
+            course_id=course_id,
+            section_no=section_no,
+            course_name=section_info.course_name,
+            capacity=section_info.capacity,
+            enrolled=section_info.enrolled,
+            available_seats=section_info.available_seats,
+            is_full=section_info.is_full,
+            instructor=section_info.instructor,
+            days=section_info.days,
+            time_from=section_info.time_from,
+            time_to=section_info.time_to,
+            room=section_info.room,
+            notes=section_info.notes,
+        )
+
+    card_text = format_section_card(section_info, is_watched=True, watch_type="CHANGE")
+    reply_text = (
+        "👁 <b>تم تفعيل تتبع تغييرات الشعبة بنجاح!</b>\n\n"
+        f"{card_text}\n\n"
+        "📡 <b>سنقوم بإشعارك بأي تعديل يطرأ على هذه الشعبة:</b>\n"
+        "• زيادة أو نقصان عدد المسجلين والمقاعد المتاحة\n"
+        "• تغيير المدرس أو القاعة\n"
+        "• تعديل المواعيد أو الأيام أو الملاحظات"
+    )
+
+    await status_msg.edit_text(
+        reply_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_track_keyboard(course_id, section_no),
+    )
+
+
+async def untrack_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles /untrack <course_id> <section_no>."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+
+    args = context.args or []
+    if len(args) < 2:
+        await update.message.reply_text(
+            "⚠️ <b>صيغة الأمر غير صحيحة.</b>\n"
+            "الاستخدام الصحيح:\n"
+            "<code>/untrack &lt;رقم_المادة&gt; &lt;رقم_الشعبة&gt;</code>\n\n"
+            "مثال: <code>/untrack 0209100 1</code>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    course_id = args[0].strip()
+    section_no = args[1].strip()
+
+    async with async_session() as session:
+        db_user = await get_or_create_user(session, user.id)
+        removed = await remove_subscription(session, db_user.id, course_id, section_no, sub_type="CHANGE")
+
+    if removed:
+        await update.message.reply_text(
+            f"✅ تم إلغاء تتبع التغييرات للشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> بنجاح.",
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        await update.message.reply_text(
+            f"ℹ️ أنت لا تتتبع تغييرات الشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code> حالياً.",
             parse_mode=ParseMode.HTML,
         )
 
@@ -298,12 +441,16 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                 f"{status_ico} <b>شعبة {html.escape(s.section)}</b> | {avail} ({s.enrolled}/{s.capacity}) | {inst} | {d}"
             )
 
-        full_text = header + "\n".join(body) + f"\n\n💡 لمراقبة أي شعبة: <code>/watch {html.escape(course_id)} &lt;الشعبة&gt;</code>"
+        full_text = header + "\n".join(body) + (
+            f"\n\n💡 <b>خيارات المراقبة:</b>\n"
+            f"• لمراقبة مقعد شاغر: <code>/watch {html.escape(course_id)} &lt;الشعبة&gt;</code>\n"
+            f"• لتتبع أي تغيير: <code>/track {html.escape(course_id)} &lt;الشعبة&gt;</code>"
+        )
         await status_msg.edit_text(full_text, parse_mode=ParseMode.HTML)
 
 
 async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /list to show all watched courses."""
+    """Handles /list to show watched courses and tracked sections."""
     user = update.effective_user
     if not user or not update.message:
         return
@@ -314,26 +461,44 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if not subs:
         await update.message.reply_text(
-            "📭 أنت لا تراقب أي شعبة حالياً.\n\n"
-            "لبدء مراقبة شعبة جديدة، أرسل:\n"
-            "<code>/watch &lt;رقم_المادة&gt; &lt;رقم_الشعبة&gt;</code>",
+            "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
+            "• لمراقبة مقعد شاغر: <code>/watch &lt;المادة&gt; &lt;الشعبة&gt;</code>\n"
+            "• لتتبع تفاصيل شعبة: <code>/track &lt;المادة&gt; &lt;الشعبة&gt;</code>",
             parse_mode=ParseMode.HTML,
         )
         return
 
-    text = f"📋 <b>قائمة الشُعب التي تراقبها حالياً ({len(subs)}):</b>\n\n"
-    for i, sub in enumerate(subs, 1):
-        name = html.escape(sub.course_name or "مادة")
-        cid = html.escape(sub.course_id)
-        sec = html.escape(sub.section_no)
-        text += (
-            f"{i}. <b>{name}</b>\n"
-            f"   • رقم المادة: <code>{cid}</code>\n"
-            f"   • الشعبة: <code>{sec}</code>\n"
-            f"   • لإلغاء المراقبة: <code>/unwatch {cid} {sec}</code>\n\n"
-        )
+    seat_subs = [s for s in subs if s.sub_type == "SEAT"]
+    change_subs = [s for s in subs if s.sub_type == "CHANGE"]
 
-    await update.message.reply_text(text, parse_mode=ParseMode.HTML)
+    parts = [f"📋 <b>قائمة الشُعب المسجلة لديك ({len(subs)}):</b>\n"]
+
+    if seat_subs:
+        parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
+        for i, sub in enumerate(seat_subs, 1):
+            name = html.escape(sub.course_name or "مادة")
+            cid = html.escape(sub.course_id)
+            sec = html.escape(sub.section_no)
+            parts.append(
+                f"{i}. <b>{name}</b>\n"
+                f"   • رقم المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
+                f"   • للإلغاء: <code>/unwatch {cid} {sec}</code>"
+            )
+        parts.append("")
+
+    if change_subs:
+        parts.append(f"👁 <b>تتبع التغييرات والتفاصيل ({len(change_subs)}):</b>")
+        for i, sub in enumerate(change_subs, 1):
+            name = html.escape(sub.course_name or "مادة")
+            cid = html.escape(sub.course_id)
+            sec = html.escape(sub.section_no)
+            parts.append(
+                f"{i}. <b>{name}</b>\n"
+                f"   • رقم المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
+                f"   • للإلغاء: <code>/untrack {cid} {sec}</code>"
+            )
+
+    await update.message.reply_text("\n".join(parts), parse_mode=ParseMode.HTML)
 
 
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -385,10 +550,31 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             course_id, section_no = parts[1], parts[2]
             async with async_session() as session:
                 db_user = await get_or_create_user(session, user.id)
-                await remove_subscription(session, db_user.id, course_id, section_no)
+                await remove_subscription(session, db_user.id, course_id, section_no, sub_type="SEAT")
 
             await query.edit_message_text(
-                f"✅ تم إلغاء مراقبة الشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code>.",
+                f"✅ تم إلغاء مراقبة المقاعد للشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code>.",
+                parse_mode=ParseMode.HTML,
+            )
+
+    elif data.startswith("untrack:"):
+        parts = data.split(":")
+        if len(parts) == 3:
+            course_id, section_no = parts[1], parts[2]
+            await query.edit_message_reply_markup(
+                reply_markup=get_untrack_confirm_keyboard(course_id, section_no)
+            )
+
+    elif data.startswith("untrack_confirm:"):
+        parts = data.split(":")
+        if len(parts) == 3:
+            course_id, section_no = parts[1], parts[2]
+            async with async_session() as session:
+                db_user = await get_or_create_user(session, user.id)
+                await remove_subscription(session, db_user.id, course_id, section_no, sub_type="CHANGE")
+
+            await query.edit_message_text(
+                f"✅ تم إلغاء تتبع التغييرات للشعبة <code>{html.escape(section_no)}</code> للمادة <code>{html.escape(course_id)}</code>.",
                 parse_mode=ParseMode.HTML,
             )
 

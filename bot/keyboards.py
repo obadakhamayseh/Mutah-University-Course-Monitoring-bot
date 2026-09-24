@@ -19,7 +19,7 @@ def get_alert_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarkup:
 
 
 def get_section_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarkup:
-    """Keyboard for a single section status display."""
+    """Keyboard for a single section status display for seat watching."""
     keyboard = [
         [
             InlineKeyboardButton(
@@ -38,13 +38,47 @@ def get_section_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarku
     return InlineKeyboardMarkup(keyboard)
 
 
+def get_track_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarkup:
+    """Keyboard for a section tracked for changes."""
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🔄 فحص فوري للحالة",
+                callback_data=f"refresh:{course_id}:{section_no}",
+            ),
+            InlineKeyboardButton(
+                "❌ إلغاء التتبع",
+                callback_data=f"untrack:{course_id}:{section_no}",
+            ),
+        ],
+        [
+            InlineKeyboardButton("🌐 بوابة جريدة المواد", url=PORTAL_URL),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
 def get_unwatch_confirm_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarkup:
-    """Keyboard to confirm removal of a subscription."""
+    """Keyboard to confirm removal of a seat subscription."""
     keyboard = [
         [
             InlineKeyboardButton(
                 "نعم، إلغاء المراقبة",
                 callback_data=f"unwatch_confirm:{course_id}:{section_no}",
+            ),
+            InlineKeyboardButton("تراجع", callback_data="cancel"),
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_untrack_confirm_keyboard(course_id: str, section_no: str) -> InlineKeyboardMarkup:
+    """Keyboard to confirm removal of a change tracking subscription."""
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "نعم، إلغاء التتبع",
+                callback_data=f"untrack_confirm:{course_id}:{section_no}",
             ),
             InlineKeyboardButton("تراجع", callback_data="cancel"),
         ]

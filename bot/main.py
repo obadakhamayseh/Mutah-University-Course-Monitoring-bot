@@ -30,6 +30,8 @@ from bot.handlers import (
     help_command,
     watch_command,
     unwatch_command,
+    track_command,
+    untrack_command,
     check_command,
     list_command,
     callback_query_handler,
@@ -102,6 +104,8 @@ def build_application(token: str, fetcher: MutahFetcher) -> Application:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("watch", watch_command))
     application.add_handler(CommandHandler("unwatch", unwatch_command))
+    application.add_handler(CommandHandler("track", track_command))
+    application.add_handler(CommandHandler("untrack", untrack_command))
     application.add_handler(CommandHandler("check", check_command))
     application.add_handler(CommandHandler("list", list_command))
 

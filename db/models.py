@@ -43,6 +43,7 @@ class Subscription(Base):
     course_id = Column(String(20), nullable=False, index=True)
     section_no = Column(String(10), nullable=False, index=True)
     course_name = Column(String(255), nullable=True)
+    sub_type = Column(String(20), default="SEAT", nullable=False, index=True)  # 'SEAT' or 'CHANGE'
     is_active = Column(Boolean, default=True, nullable=False)
     notified_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utcnow)
@@ -50,13 +51,14 @@ class Subscription(Base):
     user = relationship("User", back_populates="subscriptions")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "course_id", "section_no", name="uq_user_course_section"),
+        UniqueConstraint("user_id", "course_id", "section_no", "sub_type", name="uq_user_course_section_type"),
     )
 
 
 class SectionCache(Base):
     """
-    Stores last known state of monitored sections to detect state transitions (FULL -> AVAILABLE).
+    Stores last known state of monitored sections to detect state transitions (FULL -> AVAILABLE)
+    or detail changes (Instructor, Room, Schedule, Seats).
     """
     __tablename__ = "section_cache"
 
@@ -64,9 +66,15 @@ class SectionCache(Base):
     course_id = Column(String(20), nullable=False, index=True)
     section_no = Column(String(10), nullable=False, index=True)
     course_name = Column(String(255), nullable=True)
+    instructor = Column(String(100), nullable=True)
     capacity = Column(Integer, default=0)
     enrolled = Column(Integer, default=0)
     available_seats = Column(Integer, default=0)
+    days = Column(String(50), nullable=True)
+    time_from = Column(String(20), nullable=True)
+    time_to = Column(String(20), nullable=True)
+    room = Column(String(50), nullable=True)
+    notes = Column(String(255), nullable=True)
     is_full = Column(Boolean, default=True)
     last_checked_at = Column(DateTime(timezone=True), default=utcnow)
 

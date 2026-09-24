@@ -1,6 +1,7 @@
 import asyncio
 import logging
-from typing import Optional, Callable, Awaitable
+import html
+from typing import Optional, Callable, Awaitable, List
 from datetime import datetime, timezone
 
 from config import CHECK_INTERVAL_SECONDS, REQUEST_DELAY_SECONDS
@@ -18,8 +19,6 @@ from db.crud import (
 
 logger = logging.getLogger(__name__)
 
-
-import html
 
 def format_available_alert(section: SectionInfo) -> str:
     """Formats an urgent notification message in Arabic when a seat opens."""
@@ -46,10 +45,64 @@ def format_available_alert(section: SectionInfo) -> str:
     )
 
 
+def detect_section_changes(cache, current: SectionInfo) -> List[str]:
+    """Detects differences between previous cached state and current state."""
+    changes = []
+    if cache.enrolled != current.enrolled:
+        changes.append(
+            f"👥 <b>المسجلين:</b> تغير من <code>{cache.enrolled}</code> إلى <code>{current.enrolled}</code> (المتاح: {current.available_seats})"
+        )
+    if cache.capacity != current.capacity:
+        changes.append(
+            f"📊 <b>السعة الكلية:</b> تغيرت من <code>{cache.capacity}</code> إلى <code>{current.capacity}</code>"
+        )
+    if (cache.instructor or "").strip() != (current.instructor or "").strip():
+        old_inst = html.escape(cache.instructor or "غير محدد")
+        new_inst = html.escape(current.instructor or "غير محدد")
+        changes.append(f"👨‍🏫 <b>المدرس:</b> تغير من <i>{old_inst}</i> إلى <i>{new_inst}</i>")
+    if (cache.days or "").strip() != (current.days or "").strip():
+        old_days = html.escape(cache.days or "-")
+        new_days = html.escape(current.days or "-")
+        changes.append(f"📅 <b>الأيام:</b> تغيرت من <i>{old_days}</i> إلى <i>{new_days}</i>")
+
+    old_time = f"{cache.time_from or ''} - {cache.time_to or ''}".strip(" -")
+    new_time = f"{current.time_from or ''} - {current.time_to or ''}".strip(" -")
+    if old_time != new_time:
+        changes.append(f"⏰ <b>الموعد:</b> تغير من <i>{html.escape(old_time or '-')}</i> إلى <i>{html.escape(new_time or '-')}</i>")
+
+    if (cache.room or "").strip() != (current.room or "").strip():
+        old_room = html.escape(cache.room or "-")
+        new_room = html.escape(current.room or "-")
+        changes.append(f"🏢 <b>القاعة:</b> تغيرت من <i>{old_room}</i> إلى <i>{new_room}</i>")
+
+    if (cache.notes or "").strip() != (current.notes or "").strip():
+        new_notes = html.escape(current.notes or "تمت إزالة الملاحظات")
+        changes.append(f"📝 <b>الملاحظات:</b> {new_notes}")
+
+    return changes
+
+
+def format_change_alert(section: SectionInfo, changes: List[str]) -> str:
+    """Formats a detailed notification message when any section property changes."""
+    course_name = html.escape(str(section.course_name or ""))
+    course_id = html.escape(str(section.course_id or ""))
+    sec_no = html.escape(str(section.section or ""))
+
+    changes_body = "\n".join(f"• {c}" for c in changes)
+    return (
+        "📢 <b>تنبيه رصد تغيير في الشعبة!</b> 📢\n\n"
+        f"📚 <b>المادة:</b> {course_name} (<code>{course_id}</code>)\n"
+        f"🔢 <b>الشعبة:</b> <code>{sec_no}</code>\n\n"
+        f"🔍 <b>التغييرات المرصودة:</b>\n"
+        f"{changes_body}\n\n"
+        f"⏱ <b>وقت التحديث:</b> {datetime.now().strftime('%I:%M:%S %p')}"
+    )
+
+
 class SectionMonitor:
     """
     Background worker that periodically checks watched university course sections.
-    Implements deduplication and detects state transitions (FULL -> AVAILABLE).
+    Supports both SEAT availability monitoring and CHANGE tracking with deduplication.
     """
 
     def __init__(
@@ -67,7 +120,9 @@ class SectionMonitor:
 
     async def check_single_section(self, course_id: str, section_no: str) -> None:
         """
-        Checks a single section, compares with cache, and triggers notifications if seats opened.
+        Checks a single section, compares with cache, and triggers notifications:
+        - If seats open (FULL -> AVAILABLE): alerts 'SEAT' subscribers.
+        - If any property changed: alerts 'CHANGE' subscribers.
         """
         logger.info(f"Checking section {course_id} - sec {section_no}...")
 
@@ -84,23 +139,24 @@ class SectionMonitor:
         async with async_session() as session:
             cache = await get_section_cache(session, course_id, section_no)
 
-            # Determine state transition
-            # Transition FULL -> AVAILABLE happens if:
-            # 1. Previously known as full (or not in cache yet) AND currently has available seats > 0.
+            # 1. Check for field changes (for 'CHANGE' tracker subscribers)
+            if cache is not None:
+                detected_changes = detect_section_changes(cache, section_info)
+                if detected_changes:
+                    logger.info(f"Detected {len(detected_changes)} change(s) in {course_id}-{section_no}")
+                    change_subs = await get_subscribers_for_section(session, course_id, section_no, sub_type="CHANGE")
+                    if change_subs and self.notify_callback:
+                        change_text = format_change_alert(section_info, detected_changes)
+                        for sub, user in change_subs:
+                            try:
+                                await self.notify_callback(user.telegram_id, change_text, course_id, section_no)
+                                await log_notification(session, user.id, course_id, section_no, section_info.available_seats)
+                            except Exception as ex:
+                                logger.error(f"Failed to send change alert to {user.telegram_id}: {ex}")
+
+            # 2. Check for seat transition FULL -> AVAILABLE (for 'SEAT' subscribers)
             previously_full = (cache is None) or cache.is_full or (cache.available_seats <= 0)
             currently_available = (not section_info.is_full) and (section_info.available_seats > 0)
-
-            # Update cache record
-            await update_section_cache(
-                session=session,
-                course_id=course_id,
-                section_no=section_no,
-                course_name=section_info.course_name,
-                capacity=section_info.capacity,
-                enrolled=section_info.enrolled,
-                available_seats=section_info.available_seats,
-                is_full=section_info.is_full,
-            )
 
             if previously_full and currently_available:
                 logger.info(
@@ -108,11 +164,10 @@ class SectionMonitor:
                     f"Seats: {section_info.available_seats}/{section_info.capacity}"
                 )
 
-                subscribers = await get_subscribers_for_section(session, course_id, section_no)
+                seat_subs = await get_subscribers_for_section(session, course_id, section_no, sub_type="SEAT")
                 alert_text = format_available_alert(section_info)
 
-                for sub, user in subscribers:
-                    # Send alert only if not already notified for this opening
+                for sub, user in seat_subs:
                     if sub.notified_at is None and self.notify_callback:
                         try:
                             sent = await self.notify_callback(
@@ -130,19 +185,31 @@ class SectionMonitor:
                                     section_no=section_no,
                                     available_seats=section_info.available_seats,
                                 )
-                                logger.info(
-                                    f"Alert sent to user {user.telegram_id} for {course_id}-{section_no}"
-                                )
                         except Exception as ex:
                             logger.error(f"Failed to notify user {user.telegram_id}: {ex}")
 
             elif section_info.is_full or section_info.available_seats <= 0:
-                # If section became full again, reset notification state so future seat openings trigger alert
                 if cache and not cache.is_full:
-                    logger.info(
-                        f"Section {course_id} sec {section_no} is full again. Resetting notifications."
-                    )
+                    logger.info(f"Section {course_id} sec {section_no} is full again. Resetting notifications.")
                     await reset_subscription_notification(session, course_id, section_no)
+
+            # 3. Update cache record with full details
+            await update_section_cache(
+                session=session,
+                course_id=course_id,
+                section_no=section_no,
+                course_name=section_info.course_name,
+                capacity=section_info.capacity,
+                enrolled=section_info.enrolled,
+                available_seats=section_info.available_seats,
+                is_full=section_info.is_full,
+                instructor=section_info.instructor,
+                days=section_info.days,
+                time_from=section_info.time_from,
+                time_to=section_info.time_to,
+                room=section_info.room,
+                notes=section_info.notes,
+            )
 
     async def run_cycle(self) -> None:
         """Runs a single monitoring cycle across all distinct watched sections."""
