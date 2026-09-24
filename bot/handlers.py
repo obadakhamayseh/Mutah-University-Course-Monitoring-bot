@@ -447,21 +447,12 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     async with async_session() as session:
         db_user = await get_or_create_user(session, user.id)
-        subs = await get_user_subscriptions(session, db_user.id, active_only=True)
-
-    if not subs:
-        await update.message.reply_text(
-            "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
-            "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) أو استخدم الأمر:\n"
-            "• <code>/check &lt;رقم_المادة&gt;</code> للاستعراض والمراقبة بنقرة زر!",
-            parse_mode=ParseMode.HTML,
-        )
-        return
-
+async def format_dashboard_text(session, subs: list) -> str:
+    """Helper to format the full detailed dashboard for a user's subscriptions."""
     seat_subs = [s for s in subs if s.sub_type == "SEAT"]
     change_subs = [s for s in subs if s.sub_type == "CHANGE"]
 
-    parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)}):</b>\n"]
+    parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)} شُعب):</b>\n"]
 
     if seat_subs:
         parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
@@ -469,7 +460,30 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             name = html.escape(sub.course_name or "مادة")
             cid = html.escape(sub.course_id)
             sec = html.escape(sub.section_no)
-            parts.append(f"{i}. <b>{name}</b> — مادة <code>{cid}</code> | شعبة <code>{sec}</code>")
+            cache = await get_section_cache(session, sub.course_id, sub.section_no)
+            
+            if cache:
+                status_icon = "🔴" if cache.is_full else "🟢"
+                status_str = f"ممتلئة ({cache.enrolled}/{cache.capacity})" if cache.is_full else f"شاغرة ({cache.available_seats} مقاعد متاحة)"
+                inst = html.escape(cache.instructor or "غير محدد")
+                days = html.escape(cache.days or "-")
+                t_from = html.escape(cache.time_from or "-")
+                t_to = html.escape(cache.time_to or "-")
+                room = html.escape(cache.room or "-")
+                notes = f" | ملاحظات: {html.escape(cache.notes)}" if cache.notes else ""
+                
+                parts.append(
+                    f"{i}. {status_icon} <b>{name}</b>\n"
+                    f"   • المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
+                    f"   • الحالة: <b>{status_str}</b>\n"
+                    f"   • المدرس: {inst}\n"
+                    f"   • الأوقات: {days} ({t_from} - {t_to}) | القاعة: {room}{notes}\n"
+                )
+            else:
+                parts.append(
+                    f"{i}. 🔔 <b>{name}</b>\n"
+                    f"   • المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
+                )
         parts.append("")
 
     if change_subs:
@@ -478,12 +492,58 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             name = html.escape(sub.course_name or "مادة")
             cid = html.escape(sub.course_id)
             sec = html.escape(sub.section_no)
-            parts.append(f"{i}. <b>{name}</b> — مادة <code>{cid}</code> | شعبة <code>{sec}</code>")
+            cache = await get_section_cache(session, sub.course_id, sub.section_no)
+            
+            if cache:
+                status_icon = "🔴" if cache.is_full else "🟢"
+                status_str = f"ممتلئة ({cache.enrolled}/{cache.capacity})" if cache.is_full else f"شاغرة ({cache.available_seats} مقاعد متاحة)"
+                inst = html.escape(cache.instructor or "غير محدد")
+                days = html.escape(cache.days or "-")
+                t_from = html.escape(cache.time_from or "-")
+                t_to = html.escape(cache.time_to or "-")
+                room = html.escape(cache.room or "-")
+                notes = f" | ملاحظات: {html.escape(cache.notes)}" if cache.notes else ""
+                
+                parts.append(
+                    f"{i}. {status_icon} <b>{name}</b>\n"
+                    f"   • المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
+                    f"   • المسجلين: <b>{status_str}</b>\n"
+                    f"   • المدرس: {inst}\n"
+                    f"   • الأوقات: {days} ({t_from} - {t_to}) | القاعة: {room}{notes}\n"
+                )
+            else:
+                parts.append(
+                    f"{i}. 👁 <b>{name}</b>\n"
+                    f"   • المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
+                )
 
-    parts.append("\n👇 <i>يمكنك إلغاء أي شعبة مباشرة بالضغط على الزر المقابل لها أدناه:</i>")
+    parts.append("👇 <i>اضغط على أي زر لإلغاء المراقبة أو التحديث:</i>")
+    return "\n".join(parts)
+
+
+async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Handles /list to show watched courses and tracked sections with full details."""
+    user = update.effective_user
+    if not user or not update.message:
+        return
+
+    async with async_session() as session:
+        db_user = await get_or_create_user(session, user.id)
+        subs = await get_user_subscriptions(session, db_user.id, active_only=True)
+
+        if not subs:
+            await update.message.reply_text(
+                "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
+                "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) أو استخدم الأمر:\n"
+                "• <code>/check &lt;رقم_المادة&gt;</code> للاستعراض والمراقبة بنقرة زر!",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        dashboard_text = await format_dashboard_text(session, subs)
 
     await update.message.reply_text(
-        "\n".join(parts),
+        dashboard_text,
         parse_mode=ParseMode.HTML,
         reply_markup=get_list_dashboard_keyboard(subs),
     )
@@ -705,36 +765,20 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             db_user = await get_or_create_user(session, user.id)
             subs = await get_user_subscriptions(session, db_user.id, active_only=True)
 
-        if not subs:
-            await query.edit_message_text(
-                "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
-                "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!",
-                parse_mode=ParseMode.HTML,
-            )
-            return
+            if not subs:
+                await query.edit_message_text(
+                    "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
+                    "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_main_menu_keyboard(),
+                )
+                return
 
-        seat_subs = [s for s in subs if s.sub_type == "SEAT"]
-        change_subs = [s for s in subs if s.sub_type == "CHANGE"]
-
-        parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)}):</b>\n"]
-        if seat_subs:
-            parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
-            for i, sub in enumerate(seat_subs, 1):
-                name = html.escape(sub.course_name or "مادة")
-                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
-            parts.append("")
-
-        if change_subs:
-            parts.append(f"👁 <b>تتبع التغييرات والتفاصيل ({len(change_subs)}):</b>")
-            for i, sub in enumerate(change_subs, 1):
-                name = html.escape(sub.course_name or "مادة")
-                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
-
-        parts.append("\n👇 <i>يمكنك إلغاء أي شعبة مباشرة بالضغط على الزر المقابل لها أدناه:</i>")
+            dashboard_text = await format_dashboard_text(session, subs)
 
         try:
             await query.edit_message_text(
-                "\n".join(parts),
+                dashboard_text,
                 parse_mode=ParseMode.HTML,
                 reply_markup=get_list_dashboard_keyboard(subs),
             )
@@ -750,36 +794,19 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
             db_user = await get_or_create_user(session, user.id)
             subs = await get_user_subscriptions(session, db_user.id, active_only=True)
 
-        if not subs:
-            await query.edit_message_text(
-                "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
-                "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!",
-                parse_mode=ParseMode.HTML,
-                reply_markup=get_main_menu_keyboard(),
-            )
-            return
+            if not subs:
+                await query.edit_message_text(
+                    "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
+                    "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!",
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_main_menu_keyboard(),
+                )
+                return
 
-        seat_subs = [s for s in subs if s.sub_type == "SEAT"]
-        change_subs = [s for s in subs if s.sub_type == "CHANGE"]
-
-        parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)}):</b>\n"]
-        if seat_subs:
-            parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
-            for i, sub in enumerate(seat_subs, 1):
-                name = html.escape(sub.course_name or "مادة")
-                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
-            parts.append("")
-
-        if change_subs:
-            parts.append(f"👁 <b>تتبع التغييرات والتفاصيل ({len(change_subs)}):</b>")
-            for i, sub in enumerate(change_subs, 1):
-                name = html.escape(sub.course_name or "مادة")
-                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
-
-        parts.append("\n👇 <i>يمكنك إلغاء أي شعبة مباشرة بالضغط على الزر المقابل لها أدناه:</i>")
+            dashboard_text = await format_dashboard_text(session, subs)
 
         await query.edit_message_text(
-            "\n".join(parts),
+            dashboard_text,
             parse_mode=ParseMode.HTML,
             reply_markup=get_list_dashboard_keyboard(subs),
         )
