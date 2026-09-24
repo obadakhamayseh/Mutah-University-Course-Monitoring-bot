@@ -10,9 +10,12 @@ load_dotenv(BASE_DIR / ".env")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 
 # Database Configuration
-# Default to Supabase PostgreSQL for cloud persistence across restarts / Render spin-downs:
-DEFAULT_SUPABASE_URL = "postgresql+asyncpg://postgres:etpPil2MOmHqqnJp@db.fnpdmupnbrgopfnnmfgu.supabase.co:5432/postgres"
+# Default to Supabase PostgreSQL (IPv4 Pooler endpoint required for Render & cloud hosts):
+DEFAULT_SUPABASE_URL = "postgresql+asyncpg://postgres.fnpdmupnbrgopfnnmfgu:etpPil2MOmHqqnJp@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres"
 DATABASE_URL = os.getenv("DATABASE_URL", DEFAULT_SUPABASE_URL)
+# If the DATABASE_URL in environment still points to the direct IPv6 hostname, automatically redirect to IPv4 pooler:
+if "db.fnpdmupnbrgopfnnmfgu.supabase.co" in DATABASE_URL:
+    DATABASE_URL = DATABASE_URL.replace("db.fnpdmupnbrgopfnnmfgu.supabase.co", "aws-0-ap-southeast-2.pooler.supabase.com").replace("postgres:", "postgres.fnpdmupnbrgopfnnmfgu:")
 if ("sqlite" in DATABASE_URL) and not os.getenv("USE_LOCAL_SQLITE"):
     DATABASE_URL = DEFAULT_SUPABASE_URL
 
