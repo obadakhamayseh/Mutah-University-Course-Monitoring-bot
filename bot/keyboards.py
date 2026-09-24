@@ -84,3 +84,59 @@ def get_untrack_confirm_keyboard(course_id: str, section_no: str) -> InlineKeybo
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
+
+
+def get_course_sections_keyboard(course_id: str, sections: list) -> InlineKeyboardMarkup:
+    """Generates interactive buttons for all sections of a course."""
+    keyboard = []
+    for s in sections:
+        sec_no = str(s.section)
+        avail = s.available_seats
+        if s.is_full:
+            label = f"🔴 شعبة {sec_no} (ممتلئة) 🔔 راقب"
+            cb = f"quick_watch:{course_id}:{sec_no}"
+        else:
+            label = f"🟢 شعبة {sec_no} (متاح {avail}) 👁 تتبع"
+            cb = f"quick_track:{course_id}:{sec_no}"
+
+        details_btn = InlineKeyboardButton("📋 تفاصيل", callback_data=f"details:{course_id}:{sec_no}")
+        action_btn = InlineKeyboardButton(label, callback_data=cb)
+        keyboard.append([action_btn, details_btn])
+
+    keyboard.append([
+        InlineKeyboardButton("🔄 تحديث الكل", callback_data=f"refresh_course:{course_id}"),
+        InlineKeyboardButton("🌐 بوابة التسجيل", url=PORTAL_URL),
+    ])
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_quick_sub_keyboard(course_id: str, section_no: str, is_full: bool) -> InlineKeyboardMarkup:
+    """Generates options when viewing a single section details."""
+    keyboard = [
+        [
+            InlineKeyboardButton("🔔 مراقبة مقعد", callback_data=f"quick_watch:{course_id}:{section_no}"),
+            InlineKeyboardButton("👁 تتبع التغييرات", callback_data=f"quick_track:{course_id}:{section_no}"),
+        ],
+        [
+            InlineKeyboardButton("🔄 تحديث", callback_data=f"refresh:{course_id}:{section_no}"),
+            InlineKeyboardButton("🔙 رجوع للشعب", callback_data=f"refresh_course:{course_id}"),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+def get_list_dashboard_keyboard(subs: list) -> InlineKeyboardMarkup:
+    """Generates inline cancel buttons for subscriptions list."""
+    keyboard = []
+    for sub in subs[:15]:  # limit to top 15 buttons to fit Telegram limits
+        sub_type_icon = "🔔" if sub.sub_type == "SEAT" else "👁"
+        btn_label = f"❌ إلغاء {sub_type_icon} {sub.course_id} ش({sub.section_no})"
+        cb = f"unwatch_confirm:{sub.course_id}:{sub.section_no}" if sub.sub_type == "SEAT" else f"untrack_confirm:{sub.course_id}:{sub.section_no}"
+        keyboard.append([InlineKeyboardButton(btn_label, callback_data=cb)])
+
+    keyboard.append([
+        InlineKeyboardButton("🔄 تحديث القائمة", callback_data="refresh_list"),
+        InlineKeyboardButton("🌐 بوابة الجامعة", url=PORTAL_URL),
+    ])
+    return InlineKeyboardMarkup(keyboard)
+

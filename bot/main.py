@@ -9,6 +9,8 @@ from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     CallbackQueryHandler,
+    MessageHandler,
+    filters,
     ContextTypes,
 )
 
@@ -35,6 +37,7 @@ from bot.handlers import (
     check_command,
     list_command,
     callback_query_handler,
+    text_message_handler,
 )
 
 # Configure logging
@@ -111,6 +114,9 @@ def build_application(token: str, fetcher: MutahFetcher) -> Application:
 
     # Register inline button handler
     application.add_handler(CallbackQueryHandler(callback_query_handler))
+
+    # Register text message handler (for direct course ID search)
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_message_handler))
 
     # Register error handler
     application.add_error_handler(error_handler)

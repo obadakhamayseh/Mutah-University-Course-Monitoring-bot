@@ -20,6 +20,9 @@ from bot.keyboards import (
     get_track_keyboard,
     get_unwatch_confirm_keyboard,
     get_untrack_confirm_keyboard,
+    get_course_sections_keyboard,
+    get_quick_sub_keyboard,
+    get_list_dashboard_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -428,29 +431,22 @@ async def check_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
         course_name_esc = html.escape(sections[0].course_name)
         header = (
-            f"📚 <b>نتائج الاستعلام للمادة:</b> {course_name_esc} (<code>{html.escape(course_id)}</code>)\n"
-            f"عدد الشُعب: <b>{len(sections)}</b>\n\n"
+            f"📚 <b>شُعب مادة:</b> {course_name_esc} (<code>{html.escape(course_id)}</code>)\n"
+            f"📊 عدد الشُعب الكلي: <b>{len(sections)}</b>\n\n"
+            "اضغط على أي زر أدناه للاشتراك الفوري أو استعراض التفاصيل:\n"
+            "• 🔔 <b>راقب:</b> للشعب الممتلئة (تنبيه فوري عند توفر مقعد)\n"
+            "• 👁 <b>تتبع:</b> للشعب المتاحة (تنبيه عند أي تعديل)\n"
         )
-        body = []
-        for s in sections:
-            status_ico = "🔴" if s.is_full else "🟢"
-            avail = f"متاح {s.available_seats}" if s.available_seats > 0 else "ممتلئة"
-            inst = html.escape(s.instructor or "بدون مدرس")
-            d = html.escape(s.days or "-")
-            body.append(
-                f"{status_ico} <b>شعبة {html.escape(s.section)}</b> | {avail} ({s.enrolled}/{s.capacity}) | {inst} | {d}"
-            )
 
-        full_text = header + "\n".join(body) + (
-            f"\n\n💡 <b>خيارات المراقبة:</b>\n"
-            f"• لمراقبة مقعد شاغر: <code>/watch {html.escape(course_id)} &lt;الشعبة&gt;</code>\n"
-            f"• لتتبع أي تغيير: <code>/track {html.escape(course_id)} &lt;الشعبة&gt;</code>"
+        await status_msg.edit_text(
+            header,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_course_sections_keyboard(course_id, sections),
         )
-        await status_msg.edit_text(full_text, parse_mode=ParseMode.HTML)
 
 
 async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Handles /list to show watched courses and tracked sections."""
+    """Handles /list to show watched courses and tracked sections with inline cancel buttons."""
     user = update.effective_user
     if not user or not update.message:
         return
@@ -462,8 +458,8 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not subs:
         await update.message.reply_text(
             "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
-            "• لمراقبة مقعد شاغر: <code>/watch &lt;المادة&gt; &lt;الشعبة&gt;</code>\n"
-            "• لتتبع تفاصيل شعبة: <code>/track &lt;المادة&gt; &lt;الشعبة&gt;</code>",
+            "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) أو استخدم الأمر:\n"
+            "• <code>/check &lt;رقم_المادة&gt;</code> للاستعراض والمراقبة بنقرة زر!",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -471,7 +467,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     seat_subs = [s for s in subs if s.sub_type == "SEAT"]
     change_subs = [s for s in subs if s.sub_type == "CHANGE"]
 
-    parts = [f"📋 <b>قائمة الشُعب المسجلة لديك ({len(subs)}):</b>\n"]
+    parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)}):</b>\n"]
 
     if seat_subs:
         parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
@@ -479,11 +475,7 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             name = html.escape(sub.course_name or "مادة")
             cid = html.escape(sub.course_id)
             sec = html.escape(sub.section_no)
-            parts.append(
-                f"{i}. <b>{name}</b>\n"
-                f"   • رقم المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
-                f"   • للإلغاء: <code>/unwatch {cid} {sec}</code>"
-            )
+            parts.append(f"{i}. <b>{name}</b> — مادة <code>{cid}</code> | شعبة <code>{sec}</code>")
         parts.append("")
 
     if change_subs:
@@ -492,13 +484,15 @@ async def list_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             name = html.escape(sub.course_name or "مادة")
             cid = html.escape(sub.course_id)
             sec = html.escape(sub.section_no)
-            parts.append(
-                f"{i}. <b>{name}</b>\n"
-                f"   • رقم المادة: <code>{cid}</code> | الشعبة: <code>{sec}</code>\n"
-                f"   • للإلغاء: <code>/untrack {cid} {sec}</code>"
-            )
+            parts.append(f"{i}. <b>{name}</b> — مادة <code>{cid}</code> | شعبة <code>{sec}</code>")
 
-    await update.message.reply_text("\n".join(parts), parse_mode=ParseMode.HTML)
+    parts.append("\n👇 <i>يمكنك إلغاء أي شعبة مباشرة بالضغط على الزر المقابل لها أدناه:</i>")
+
+    await update.message.reply_text(
+        "\n".join(parts),
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_list_dashboard_keyboard(subs),
+    )
 
 
 async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -578,5 +572,227 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 parse_mode=ParseMode.HTML,
             )
 
+    elif data.startswith("quick_watch:"):
+        parts = data.split(":")
+        if len(parts) == 3:
+            course_id, section_no = parts[1], parts[2]
+            fetcher: MutahFetcher = context.bot_data["fetcher"]
+            section_info = await fetcher.get_section_async(course_id, section_no)
+            if not section_info:
+                await query.answer("لم يتم العثور على الشعبة في بوابة الجامعة.", show_alert=True)
+                return
+
+            async with async_session() as session:
+                db_user = await get_or_create_user(session, user.id, user.username, user.first_name)
+                await add_subscription(
+                    session=session,
+                    user_id=db_user.id,
+                    course_id=course_id,
+                    section_no=section_no,
+                    course_name=section_info.course_name,
+                    sub_type="SEAT",
+                )
+                await update_section_cache(
+                    session=session,
+                    course_id=course_id,
+                    section_no=section_no,
+                    course_name=section_info.course_name,
+                    capacity=section_info.capacity,
+                    enrolled=section_info.enrolled,
+                    available_seats=section_info.available_seats,
+                    is_full=section_info.is_full,
+                    instructor=section_info.instructor,
+                    days=section_info.days,
+                    time_from=section_info.time_from,
+                    time_to=section_info.time_to,
+                    room=section_info.room,
+                    notes=section_info.notes,
+                )
+
+            card_text = format_section_card(section_info, is_watched=True, watch_type="SEAT")
+            await query.edit_message_text(
+                f"🔔 <b>تم تفعيل مراقبة المقاعد الشاغرة بنجاح!</b>\n\n{card_text}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_section_keyboard(course_id, section_no),
+            )
+            await query.answer("تم تفعيل مراقبة المقعد بنجاح! 🔔")
+
+    elif data.startswith("quick_track:"):
+        parts = data.split(":")
+        if len(parts) == 3:
+            course_id, section_no = parts[1], parts[2]
+            fetcher: MutahFetcher = context.bot_data["fetcher"]
+            section_info = await fetcher.get_section_async(course_id, section_no)
+            if not section_info:
+                await query.answer("لم يتم العثور على الشعبة في بوابة الجامعة.", show_alert=True)
+                return
+
+            async with async_session() as session:
+                db_user = await get_or_create_user(session, user.id, user.username, user.first_name)
+                await add_subscription(
+                    session=session,
+                    user_id=db_user.id,
+                    course_id=course_id,
+                    section_no=section_no,
+                    course_name=section_info.course_name,
+                    sub_type="CHANGE",
+                )
+                await update_section_cache(
+                    session=session,
+                    course_id=course_id,
+                    section_no=section_no,
+                    course_name=section_info.course_name,
+                    capacity=section_info.capacity,
+                    enrolled=section_info.enrolled,
+                    available_seats=section_info.available_seats,
+                    is_full=section_info.is_full,
+                    instructor=section_info.instructor,
+                    days=section_info.days,
+                    time_from=section_info.time_from,
+                    time_to=section_info.time_to,
+                    room=section_info.room,
+                    notes=section_info.notes,
+                )
+
+            card_text = format_section_card(section_info, is_watched=True, watch_type="CHANGE")
+            await query.edit_message_text(
+                f"👁 <b>تم تفعيل تتبع تغييرات الشعبة بنجاح!</b>\n\n{card_text}",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_track_keyboard(course_id, section_no),
+            )
+            await query.answer("تم تفعيل تتبع التغييرات بنجاح! 👁")
+
+    elif data.startswith("details:"):
+        parts = data.split(":")
+        if len(parts) == 3:
+            course_id, section_no = parts[1], parts[2]
+            fetcher: MutahFetcher = context.bot_data["fetcher"]
+            section = await fetcher.get_section_async(course_id, section_no)
+            if section:
+                text = format_section_card(section, is_watched=False)
+                await query.edit_message_text(
+                    text,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_quick_sub_keyboard(course_id, section_no, section.is_full),
+                )
+            else:
+                await query.answer("تعذر جلب تفاصيل الشعبة حالياً.", show_alert=True)
+
+    elif data.startswith("refresh_course:"):
+        course_id = data.split(":")[1]
+        fetcher: MutahFetcher = context.bot_data["fetcher"]
+        sections = await fetcher.search_course_async(course_id)
+        if sections:
+            course_name_esc = html.escape(sections[0].course_name)
+            header = (
+                f"📚 <b>شُعب مادة:</b> {course_name_esc} (<code>{html.escape(course_id)}</code>)\n"
+                f"📊 عدد الشُعب الكلي: <b>{len(sections)}</b>\n\n"
+                "اضغط على أي زر أدناه للاشتراك الفوري أو استعراض التفاصيل:\n"
+                "• 🔔 <b>راقب:</b> للشعب الممتلئة (تنبيه فوري عند توفر مقعد)\n"
+                "• 👁 <b>تتبع:</b> للشعب المتاحة (تنبيه عند أي تعديل)\n"
+            )
+            try:
+                await query.edit_message_text(
+                    header,
+                    parse_mode=ParseMode.HTML,
+                    reply_markup=get_course_sections_keyboard(course_id, sections),
+                )
+                await query.answer("تم تحديث قائمة الشُعب بنجاح ✅")
+            except Exception as e:
+                if "Message is not modified" in str(e):
+                    await query.answer("تم الفحص: لا يوجد أي تغيير في شُعب المادة ✅")
+                else:
+                    raise
+        else:
+            await query.answer("تعذر جلب شُعب المادة حالياً.", show_alert=True)
+
+    elif data == "refresh_list":
+        async with async_session() as session:
+            db_user = await get_or_create_user(session, user.id)
+            subs = await get_user_subscriptions(session, db_user.id, active_only=True)
+
+        if not subs:
+            await query.edit_message_text(
+                "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
+                "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        seat_subs = [s for s in subs if s.sub_type == "SEAT"]
+        change_subs = [s for s in subs if s.sub_type == "CHANGE"]
+
+        parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)}):</b>\n"]
+        if seat_subs:
+            parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
+            for i, sub in enumerate(seat_subs, 1):
+                name = html.escape(sub.course_name or "مادة")
+                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
+            parts.append("")
+
+        if change_subs:
+            parts.append(f"👁 <b>تتبع التغييرات والتفاصيل ({len(change_subs)}):</b>")
+            for i, sub in enumerate(change_subs, 1):
+                name = html.escape(sub.course_name or "مادة")
+                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
+
+        parts.append("\n👇 <i>يمكنك إلغاء أي شعبة مباشرة بالضغط على الزر المقابل لها أدناه:</i>")
+
+        try:
+            await query.edit_message_text(
+                "\n".join(parts),
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_list_dashboard_keyboard(subs),
+            )
+            await query.answer("تم تحديث القائمة بنجاح ✅")
+        except Exception as e:
+            if "Message is not modified" in str(e):
+                await query.answer("القائمة محدثة بالفعل ✅")
+            else:
+                raise
+
     elif data == "cancel":
         await query.edit_message_text("تم الإلغاء.", parse_mode=ParseMode.HTML)
+
+
+async def text_message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """
+    Handles regular text messages. If user types a course ID directly (e.g., 0209100 or 209100),
+    automatically fetch and display all sections with interactive buttons!
+    """
+    if not update.message or not update.message.text:
+        return
+
+    text = update.message.text.strip()
+    # Check if text looks like a course ID (5 to 10 digits)
+    if text.isdigit() and len(text) in range(5, 12):
+        course_id = text
+        fetcher: MutahFetcher = context.bot_data["fetcher"]
+        status_msg = await update.message.reply_text(
+            f"🔍 جاري البحث عن شُعب المادة <code>{html.escape(course_id)}</code> من بوابة الجامعة...",
+            parse_mode=ParseMode.HTML,
+        )
+
+        sections = await fetcher.search_course_async(course_id)
+        if not sections:
+            await status_msg.edit_text(
+                f"❌ لم يتم العثور على أي شعبة للمادة <code>{html.escape(course_id)}</code>.\n"
+                "يرجى التأكد من كتابة رقم المادة بشكل صحيح كما في الخطة الدراسية.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
+        course_name_esc = html.escape(sections[0].course_name)
+        header = (
+            f"📚 <b>شُعب مادة:</b> {course_name_esc} (<code>{html.escape(course_id)}</code>)\n"
+            f"📊 عدد الشُعب الكلي: <b>{len(sections)}</b>\n\n"
+            "اضغط على أي زر أدناه للاشتراك الفوري أو استعراض التفاصيل:\n"
+            "• 🔔 <b>راقب:</b> للشعب الممتلئة (تنبيه فوري عند توفر مقعد)\n"
+            "• 👁 <b>تتبع:</b> للشعب المتاحة (تنبيه عند أي تعديل)\n"
+        )
+        await status_msg.edit_text(
+            header,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_course_sections_keyboard(course_id, sections),
+        )
+
