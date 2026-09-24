@@ -1,6 +1,6 @@
 import html
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
@@ -32,6 +32,24 @@ from bot.keyboards import (
 
 logger = logging.getLogger(__name__)
 
+JORDAN_TZ = timezone(timedelta(hours=3))
+
+
+def get_jordan_time() -> datetime:
+    """Returns current datetime in Jordan timezone (UTC+3)."""
+    return datetime.now(JORDAN_TZ)
+
+
+def format_jordan_datetime(dt: datetime) -> str:
+    """Formats a datetime object to Jordan time (UTC+3) nicely."""
+    if not dt:
+        return "غير متوفر"
+    if dt.tzinfo is None:
+        # If naive datetime from DB, assume UTC
+        dt = dt.replace(tzinfo=timezone.utc)
+    jordan_dt = dt.astimezone(JORDAN_TZ)
+    return jordan_dt.strftime("%I:%M:%S %p")
+
 
 def format_section_card(section: SectionInfo, is_watched: bool = False, watch_type: str = "SEAT") -> str:
     """Formats a detailed section information card in Arabic using HTML."""
@@ -62,8 +80,8 @@ def format_section_card(section: SectionInfo, is_watched: bool = False, watch_ty
     if notes:
         lines.append(f"📝 <b>ملاحظات:</b> {notes}")
 
-    check_time = datetime.now().strftime("%I:%M:%S %p")
-    lines.append(f"⏱ <b>آخر فحص:</b> {check_time}")
+    check_time = get_jordan_time().strftime("%I:%M:%S %p")
+    lines.append(f"⏱ <b>آخر فحص (توقيت الأردن):</b> {check_time}")
 
     if is_watched:
         if watch_type == "CHANGE":
@@ -480,6 +498,7 @@ async def format_dashboard_text(session, subs: list) -> str:
                 t_to = html.escape(cache.time_to or "-")
                 room = html.escape(cache.room or "-")
                 notes = f" | ملاحظات: {html.escape(cache.notes)}" if cache.notes else ""
+                last_time = format_jordan_datetime(cache.last_checked_at)
                 
                 parts.append(
                     f"{i}. {status_icon} <b>{name}</b>\n"
@@ -487,6 +506,7 @@ async def format_dashboard_text(session, subs: list) -> str:
                     f"   • الحالة: <b>{status_str}</b>\n"
                     f"   • المدرس: {inst}\n"
                     f"   • الأوقات: {days} ({t_from} - {t_to}) | القاعة: {room}{notes}\n"
+                    f"   • ⏱ <b>آخر تحديث:</b> {last_time} بتوقيت الأردن\n"
                 )
             else:
                 parts.append(
@@ -512,6 +532,7 @@ async def format_dashboard_text(session, subs: list) -> str:
                 t_to = html.escape(cache.time_to or "-")
                 room = html.escape(cache.room or "-")
                 notes = f" | ملاحظات: {html.escape(cache.notes)}" if cache.notes else ""
+                last_time = format_jordan_datetime(cache.last_checked_at)
                 
                 parts.append(
                     f"{i}. {status_icon} <b>{name}</b>\n"
@@ -519,6 +540,7 @@ async def format_dashboard_text(session, subs: list) -> str:
                     f"   • المسجلين: <b>{status_str}</b>\n"
                     f"   • المدرس: {inst}\n"
                     f"   • الأوقات: {days} ({t_from} - {t_to}) | القاعة: {room}{notes}\n"
+                    f"   • ⏱ <b>آخر تحديث:</b> {last_time} بتوقيت الأردن\n"
                 )
             else:
                 parts.append(

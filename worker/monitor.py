@@ -2,9 +2,11 @@ import asyncio
 import logging
 import html
 from typing import Optional, Callable, Awaitable, List
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from config import CHECK_INTERVAL_SECONDS, REQUEST_DELAY_SECONDS
+
+JORDAN_TZ = timezone(timedelta(hours=3))
 from fetcher.mutah import MutahFetcher, SectionInfo
 from db.database import async_session
 from db.crud import (
@@ -89,13 +91,14 @@ def format_change_alert(section: SectionInfo, changes: List[str]) -> str:
     sec_no = html.escape(str(section.section or ""))
 
     changes_body = "\n".join(f"• {c}" for c in changes)
+    jordan_time_str = datetime.now(JORDAN_TZ).strftime('%I:%M:%S %p')
     return (
         "📢 <b>تنبيه رصد تغيير في الشعبة!</b> 📢\n\n"
         f"📚 <b>المادة:</b> {course_name} (<code>{course_id}</code>)\n"
         f"🔢 <b>الشعبة:</b> <code>{sec_no}</code>\n\n"
         f"🔍 <b>التغييرات المرصودة:</b>\n"
         f"{changes_body}\n\n"
-        f"⏱ <b>وقت التحديث:</b> {datetime.now().strftime('%I:%M:%S %p')}"
+        f"⏱ <b>وقت التحديث:</b> {jordan_time_str} بتوقيت الأردن"
     )
 
 
