@@ -140,3 +140,19 @@ def get_list_dashboard_keyboard(subs: list) -> InlineKeyboardMarkup:
     ])
     return InlineKeyboardMarkup(keyboard)
 
+
+def get_main_menu_keyboard() -> InlineKeyboardMarkup:
+    """Main menu keyboard shown with /start and /help."""
+    keyboard = [
+        [
+            InlineKeyboardButton("📋 شُعبي المراقبة (لوحة التحكم)", callback_data="show_list"),
+        ],
+        [
+            InlineKeyboardButton("📖 طريقة الاستخدام", callback_data="show_help"),
+            InlineKeyboardButton("🌐 بوابة التسجيل", url=PORTAL_URL),
+        ],
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+
+

@@ -23,6 +23,7 @@ from bot.keyboards import (
     get_course_sections_keyboard,
     get_quick_sub_keyboard,
     get_list_dashboard_keyboard,
+    get_main_menu_keyboard,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,48 +86,41 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     user_name = html.escape(user.first_name or "صديقي")
     welcome_text = (
-        f"مرحباً بك يا <b>{user_name}</b> في <b>بوت مراقبة وتتبع مواد جامعة مؤتة</b> 🎓\n\n"
-        "يقدم البوت ميزتين منفصلتين لمساعدتك في التسجيل:\n"
-        "1️⃣ <b>مراقبة المقاعد الشاغرة:</b> إشعارك فور فتح أي شعبة ممتلئة.\n"
-        "2️⃣ <b>تتبع التغييرات:</b> إشعارك بأي تعديل على الشعبة (تغيير مدرس، قاعة، موعد، مسجلين).\n\n"
-        "📋 <b>الأوامر المتاحة:</b>\n"
-        "• <code>/watch &lt;المادة&gt; &lt;الشعبة&gt;</code> - مراقبة توفر مقعد شاغر في شعبة ممتلئة\n"
-        "• <code>/unwatch &lt;المادة&gt; &lt;الشعبة&gt;</code> - إلغاء مراقبة المقاعد\n"
-        "• <code>/track &lt;المادة&gt; &lt;الشعبة&gt;</code> - تتبع أي تغييرات تطرأ على الشعبة 👁\n"
-        "• <code>/untrack &lt;المادة&gt; &lt;الشعبة&gt;</code> - إلغاء تتبع التغييرات\n"
-        "• <code>/check &lt;المادة&gt; [الشعبة]</code> - فحص فوري لحالة مادة أو شعبة\n"
-        "• <code>/list</code> - عرض كافة المواد والشعب المراقبة\n"
-        "• <code>/help</code> - شرح مفصل لطريقة الاستخدام\n\n"
-        "💡 <b>أمثلة سريعة:</b>\n"
-        "• لمراقبة مقعد شاغر: <code>/watch 0209100 1</code>\n"
-        "• لتتبع أي تغيير في الشعبة: <code>/track 0209100 1</code>"
+        f"مرحباً بك يا <b>{user_name}</b> في <b>بوت مراقبة وتتبع مواد جامعة مؤتة</b> 🎓✨\n\n"
+        "⚡️ <b>طريقة الاستخدام السريعة (بدون كتابة أوامر):</b>\n"
+        "فقط أرسل <b>رقم المادة</b> مباشرة هنا (مثال: <code>0209100</code>).\n"
+        "وسيعرض لك البوت فوراً جميع شُعب المادة مع <b>أزرار تفاعلية</b>:\n"
+        "• 🔔 <b>زر مراقبة مقعد:</b> للشعب الممتلئة (إشعار فوري عند توفر مقعد).\n"
+        "• 👁 <b>زر تتبع الشعبة:</b> للشعب المفتوحة (إشعارك بأي تغيير في المدرس، القاعة، الموعد، أو المقاعد).\n"
+        "• 📋 <b>زر التفاصيل:</b> لمعاينة كافة أوقات وقاعات الشعبة.\n\n"
+        "📊 <b>إدارة الشُعب المراقبة:</b>\n"
+        "اضغط على زر <b>«شُعبي المراقبة»</b> بالأسفل لإلغاء أو متابعة أي شعبة بنقرة واحدة!"
     )
 
-    await update.message.reply_text(welcome_text, parse_mode=ParseMode.HTML)
+    await update.message.reply_text(
+        welcome_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_main_menu_keyboard(),
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles the /help command."""
     help_text = (
-        "📖 <b>دليل استخدام بوت جامعة مؤتة</b>\n\n"
-        "🎯 <b>الفرق بين الميزتين:</b>\n\n"
-        "1️⃣ <b>ميزة مراقبة المقاعد الشاغرة (/watch):</b>\n"
-        "• مخصصة للشعب المغلقة والممتلئة.\n"
-        "• يفحص البوت الشعبة، وفور شغور أي مقعد يرسل لك تنبيهاً عاجلاً.\n"
-        "• الأمر: <code>/watch &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n"
-        "• الإلغاء: <code>/unwatch &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n\n"
-        "2️⃣ <b>ميزة تتبع تفاصيل الشعبة والتغييرات (/track):</b>\n"
-        "• ترصد أي تعديل يطرأ على الشعبة سواء كانت ممتلئة أو غير ممتلئة:\n"
-        "  - زيادة أو نقصان عدد المسجلين أو السعة.\n"
-        "  - تغيير المدرس.\n"
-        "  - تغيير القاعة أو الموعد أو الأيام أو الملاحظات.\n"
-        "• الأمر: <code>/track &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n"
-        "• الإلغاء: <code>/untrack &lt;رقم_المادة&gt; &lt;الشعبة&gt;</code>\n\n"
-        "🔍 <b>الفحص اللحظي (/check):</b>\n"
-        "• <code>/check 0209100</code> (عرض جميع شعب المادة)\n"
-        "• <code>/check 0209100 1</code> (فحص شعبة معينة مباشرة)"
+        "📖 <b>دليل استخدام بوت جامعة مؤتة</b> 💡\n\n"
+        "✨ <b>لا داعي لكتابة أوامر يدوية بعد الآن!</b>\n"
+        "1. اكتب فقط <b>رقم أي مادة</b> بالإنجليزية (مثال: <code>0209100</code>).\n"
+        "2. ستظهر لك قائمة شُعب المادة كأزرار ملونة:\n"
+        "   - 🔴 شعبة ممتلئة ⬅️ اضغط زر <b>🔔 راقب</b> لتنبيهك عند فتح مقعد.\n"
+        "   - 🟢 شعبة متاحة ⬅️ اضغط زر <b>👁 تتبع</b> لتنبيهك عند أي تعديل بالبيانات.\n\n"
+        "📋 <b>لوحة التحكم باشتراكاتك:</b>\n"
+        "أرسل <code>/list</code> أو اضغط الزر أدناه لمعاينة وإلغاء مراقبة أي شعبة بضغطة زر واحدة."
     )
-    await update.message.reply_text(help_text, parse_mode=ParseMode.HTML)
+    await update.message.reply_text(
+        help_text,
+        parse_mode=ParseMode.HTML,
+        reply_markup=get_main_menu_keyboard(),
+    )
 
 
 async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -750,6 +744,62 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await query.answer("القائمة محدثة بالفعل ✅")
             else:
                 raise
+
+    elif data == "show_list":
+        async with async_session() as session:
+            db_user = await get_or_create_user(session, user.id)
+            subs = await get_user_subscriptions(session, db_user.id, active_only=True)
+
+        if not subs:
+            await query.edit_message_text(
+                "📭 أنت لا تراقب أو تتتبع أي شعبة حالياً.\n\n"
+                "💡 أرسل رقم أي مادة (مثل <code>0209100</code>) للاستعراض والمراقبة بنقرة زر!",
+                parse_mode=ParseMode.HTML,
+                reply_markup=get_main_menu_keyboard(),
+            )
+            return
+
+        seat_subs = [s for s in subs if s.sub_type == "SEAT"]
+        change_subs = [s for s in subs if s.sub_type == "CHANGE"]
+
+        parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)}):</b>\n"]
+        if seat_subs:
+            parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
+            for i, sub in enumerate(seat_subs, 1):
+                name = html.escape(sub.course_name or "مادة")
+                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
+            parts.append("")
+
+        if change_subs:
+            parts.append(f"👁 <b>تتبع التغييرات والتفاصيل ({len(change_subs)}):</b>")
+            for i, sub in enumerate(change_subs, 1):
+                name = html.escape(sub.course_name or "مادة")
+                parts.append(f"{i}. <b>{name}</b> — مادة <code>{html.escape(sub.course_id)}</code> | شعبة <code>{html.escape(sub.section_no)}</code>")
+
+        parts.append("\n👇 <i>يمكنك إلغاء أي شعبة مباشرة بالضغط على الزر المقابل لها أدناه:</i>")
+
+        await query.edit_message_text(
+            "\n".join(parts),
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_list_dashboard_keyboard(subs),
+        )
+
+    elif data == "show_help":
+        help_text = (
+            "📖 <b>طريقة استخدام البوت السريعة</b> 💡\n\n"
+            "✨ <b>لا داعي لكتابة أوامر يدوية بعد الآن!</b>\n"
+            "1. اكتب فقط <b>رقم أي مادة</b> بالإنجليزية (مثال: <code>0209100</code>).\n"
+            "2. ستظهر لك قائمة شُعب المادة كأزرار ملونة:\n"
+            "   - 🔴 شعبة ممتلئة ⬅️ اضغط زر <b>🔔 راقب</b> لتنبيهك عند فتح مقعد.\n"
+            "   - 🟢 شعبة متاحة ⬅️ اضغط زر <b>👁 تتبع</b> لتنبيهك عند أي تعديل بالبيانات.\n\n"
+            "📋 <b>لوحة التحكم:</b>\n"
+            "اضغط زر «شُعبي المراقبة» لمعاينة وإلغاء مراقبة أي شعبة بضغطة زر واحدة."
+        )
+        await query.edit_message_text(
+            help_text,
+            parse_mode=ParseMode.HTML,
+            reply_markup=get_main_menu_keyboard(),
+        )
 
     elif data == "cancel":
         await query.edit_message_text("تم الإلغاء.", parse_mode=ParseMode.HTML)
