@@ -31,3 +31,7 @@ try:
 except ValueError:
     ADMIN_TELEGRAM_ID = 933343496
 
+# Subscription Limits (Maximum 6 monitored sections per user)
+MAX_SUBSCRIPTIONS_PER_USER = int(os.getenv("MAX_SUBSCRIPTIONS_PER_USER", "6"))
+
+

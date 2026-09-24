@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.constants import ParseMode
 from telegram.ext import ContextTypes
 
-from config import ADMIN_TELEGRAM_ID
+from config import ADMIN_TELEGRAM_ID, MAX_SUBSCRIPTIONS_PER_USER
 from fetcher.mutah import MutahFetcher, SectionInfo
 from db.database import async_session
 from db.crud import (
@@ -194,6 +194,19 @@ async def watch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             first_name=user.first_name,
         )
 
+        # Check subscription limit (Max 6 per user)
+        existing_subs = await get_user_subscriptions(session, db_user.id, active_only=True)
+        # Check if already subscribed to this specific section and sub_type
+        already_subbed = any(s.course_id == course_id and s.section_no == section_no and s.sub_type == "SEAT" for s in existing_subs)
+        if not already_subbed and len(existing_subs) >= MAX_SUBSCRIPTIONS_PER_USER:
+            await status_msg.edit_text(
+                f"⚠️ <b>عذراً، لقد بلغت الحد الأقصى للمراقبة ({MAX_SUBSCRIPTIONS_PER_USER} شُعب).</b>\n\n"
+                "لحماية سرعة واستقرار البوت، يحق لكل طالب مراقبة حتى 6 شُعب كحد أقصى.\n"
+                "يرجى إلغاء مراقبة إحدى الشُعب السابقة من لوحة التحكم <code>/list</code> لتتمكن من إضافة هذه الشعبة.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
+
         await add_subscription(
             session=session,
             user_id=db_user.id,
@@ -320,6 +333,18 @@ async def track_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             username=user.username,
             first_name=user.first_name,
         )
+
+        # Check subscription limit (Max 6 per user)
+        existing_subs = await get_user_subscriptions(session, db_user.id, active_only=True)
+        already_subbed = any(s.course_id == course_id and s.section_no == section_no and s.sub_type == "CHANGE" for s in existing_subs)
+        if not already_subbed and len(existing_subs) >= MAX_SUBSCRIPTIONS_PER_USER:
+            await status_msg.edit_text(
+                f"⚠️ <b>عذراً، لقد بلغت الحد الأقصى للمراقبة ({MAX_SUBSCRIPTIONS_PER_USER} شُعب).</b>\n\n"
+                "لحماية سرعة واستقرار البوت، يحق لكل طالب تتبع حتى 6 شُعب كحد أقصى.\n"
+                "يرجى إلغاء مراقبة إحدى الشُعب السابقة من لوحة التحكم <code>/list</code> لتتمكن من إضافة هذه الشعبة.",
+                parse_mode=ParseMode.HTML,
+            )
+            return
 
         await add_subscription(
             session=session,
@@ -479,7 +504,7 @@ async def format_dashboard_text(session, subs: list) -> str:
     seat_subs = [s for s in subs if s.sub_type == "SEAT"]
     change_subs = [s for s in subs if s.sub_type == "CHANGE"]
 
-    parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)} شُعب):</b>\n"]
+    parts = [f"📋 <b>لوحة التحكم باشتراكاتك ({len(subs)}/{MAX_SUBSCRIPTIONS_PER_USER} شُعب):</b>\n"]
 
     if seat_subs:
         parts.append(f"🔔 <b>مراقبة المقاعد الشاغرة ({len(seat_subs)}):</b>")
@@ -669,6 +694,15 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
 
             async with async_session() as session:
                 db_user = await get_or_create_user(session, user.id, user.username, user.first_name)
+                existing_subs = await get_user_subscriptions(session, db_user.id, active_only=True)
+                already_subbed = any(s.course_id == course_id and s.section_no == section_no and s.sub_type == "SEAT" for s in existing_subs)
+                if not already_subbed and len(existing_subs) >= MAX_SUBSCRIPTIONS_PER_USER:
+                    await query.answer(
+                        f"⚠️ بلغت الحد الأقصى للمراقبة ({MAX_SUBSCRIPTIONS_PER_USER} شُعب). يرجى إلغاء إحدى الشُعب السابقة أولاً.",
+                        show_alert=True,
+                    )
+                    return
+
                 await add_subscription(
                     session=session,
                     user_id=db_user.id,
@@ -714,6 +748,15 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
 
             async with async_session() as session:
                 db_user = await get_or_create_user(session, user.id, user.username, user.first_name)
+                existing_subs = await get_user_subscriptions(session, db_user.id, active_only=True)
+                already_subbed = any(s.course_id == course_id and s.section_no == section_no and s.sub_type == "CHANGE" for s in existing_subs)
+                if not already_subbed and len(existing_subs) >= MAX_SUBSCRIPTIONS_PER_USER:
+                    await query.answer(
+                        f"⚠️ بلغت الحد الأقصى للمراقبة ({MAX_SUBSCRIPTIONS_PER_USER} شُعب). يرجى إلغاء إحدى الشُعب السابقة أولاً.",
+                        show_alert=True,
+                    )
+                    return
+
                 await add_subscription(
                     session=session,
                     user_id=db_user.id,
