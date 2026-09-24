@@ -182,16 +182,19 @@ class SectionMonitor:
         )
 
         while self.is_running:
-            start_time = asyncio.get_event_loop().time()
-            await self.run_cycle()
-            elapsed = asyncio.get_event_loop().time() - start_time
-            sleep_time = max(1.0, self.check_interval - elapsed)
-
-            logger.debug(f"Monitor cycle finished in {elapsed:.1f}s. Sleeping {sleep_time:.1f}s.")
             try:
+                start_time = asyncio.get_event_loop().time()
+                await self.run_cycle()
+                elapsed = asyncio.get_event_loop().time() - start_time
+                sleep_time = max(1.0, self.check_interval - elapsed)
+
+                logger.debug(f"Monitor cycle finished in {elapsed:.1f}s. Sleeping {sleep_time:.1f}s.")
                 await asyncio.sleep(sleep_time)
             except asyncio.CancelledError:
                 break
+            except Exception as e:
+                logger.error(f"Unexpected error in monitor loop: {e}", exc_info=True)
+                await asyncio.sleep(5.0)
 
     def stop(self) -> None:
         """Stops the monitoring worker."""

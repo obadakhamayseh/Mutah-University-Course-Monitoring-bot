@@ -277,13 +277,21 @@ class MutahFetcher:
                 return s
         return results[0] if results else None
 
-    # Async wrappers for non-blocking I/O
+    @property
+    def lock(self) -> asyncio.Lock:
+        if not hasattr(self, "_lock") or self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    # Async wrappers for non-blocking I/O protected with async lock to prevent race conditions
     async def search_course_async(
         self, course_id: str, section_no: Optional[str] = None
     ) -> List[SectionInfo]:
-        return await asyncio.to_thread(self.search_course, course_id, section_no)
+        async with self.lock:
+            return await asyncio.to_thread(self.search_course, course_id, section_no)
 
     async def get_section_async(
         self, course_id: str, section_no: str
     ) -> Optional[SectionInfo]:
-        return await asyncio.to_thread(self.get_section, course_id, section_no)
+        async with self.lock:
+            return await asyncio.to_thread(self.get_section, course_id, section_no)
