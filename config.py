@@ -25,9 +25,9 @@ REQUEST_DELAY_SECONDS = float(os.getenv("REQUEST_DELAY_SECONDS", "2.0"))
 
 # Logging & Admin
 LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
-ADMIN_TELEGRAM_ID = os.getenv("ADMIN_TELEGRAM_ID", None)
-if ADMIN_TELEGRAM_ID:
-    try:
-        ADMIN_TELEGRAM_ID = int(ADMIN_TELEGRAM_ID)
-    except ValueError:
-        ADMIN_TELEGRAM_ID = None
+admin_env = os.getenv("ADMIN_TELEGRAM_ID", "933343496")
+try:
+    ADMIN_TELEGRAM_ID = int(admin_env) if admin_env else 933343496
+except ValueError:
+    ADMIN_TELEGRAM_ID = 933343496
+

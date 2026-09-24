@@ -918,9 +918,16 @@ async def callback_query_handler(update: Update, context: ContextTypes.DEFAULT_T
 async def admin_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handles /admin command strictly for ADMIN_TELEGRAM_ID."""
     user = update.effective_user
-    if not user or not ADMIN_TELEGRAM_ID or user.id != ADMIN_TELEGRAM_ID:
+    if not user:
+        return
+
+    # Check admin ID
+    if not ADMIN_TELEGRAM_ID or int(user.id) != int(ADMIN_TELEGRAM_ID):
         if update.message:
-            await update.message.reply_text("⛔️ هذا الأمر مخصص لمدير البوت فقط.", parse_mode=ParseMode.HTML)
+            await update.message.reply_text(
+                f"⛔️ هذا الأمر مخصص لمدير البوت فقط.\n(معرف حسابك: <code>{user.id}</code>)",
+                parse_mode=ParseMode.HTML,
+            )
         return
 
     async with async_session() as session:
